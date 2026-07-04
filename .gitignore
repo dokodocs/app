@@ -21,6 +21,7 @@ lib/core/l10n/app_localizations*.dart
 
 # Android
 android/.gradle
+android/.kotlin/
 android/local.properties
 android/app/debug
 android/app/profile

@@ -1,0 +1,15 @@
+# Copy this file to `android/key.properties` and fill in your real values.
+# key.properties is git-ignored and must NEVER be committed — it points at
+# your release keystore and holds its passwords.
+#
+# Create the keystore once with (run from the project root):
+#   keytool -genkey -v -keystore android/app/dokodocs-upload.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# Then set the four values below to match what you chose.
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+# Path is relative to the android/app directory.
+storeFile=dokodocs-upload.jks
