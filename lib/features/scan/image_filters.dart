@@ -58,6 +58,11 @@ Future<String> _applyFilterIsolate(_FilterArgs args) async {
       // Contrast boost while keeping color, unlike 'bw' which desaturates —
       // makes text pop on colored backgrounds (whiteboards, colored paper).
       image = img.contrast(image, contrast: 160);
+    case 'warm':
+      // Warm-tone paper look: lift red, ease off blue, small contrast bump —
+      // flatters photographed documents under cool/office lighting.
+      image = img.colorOffset(image, red: 18, green: 4, blue: -18);
+      image = img.adjustColor(image, contrast: 1.08);
     case 'original':
     default:
       break;

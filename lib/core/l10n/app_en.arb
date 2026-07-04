@@ -158,10 +158,16 @@
   "@scanFilterHighContrast": {
     "description": "Filter option: contrast boost while keeping color, for colored backgrounds"
   },
+  "scanFilterWarm": "Warm",
+  "@scanFilterWarm": {
+    "description": "Filter option: warm-tone paper look (lifts red, eases blue)"
+  },
   "scanNoPagesYet": "No pages captured",
   "@scanNoPagesYet": {
     "description": "Shown if the scan session is somehow empty"
   },
+  "scanSaveFailed": "Couldn't save: {error}",
+  "@scanSaveFailed": {"description": "Shown when saving a scanned/imported document fails", "placeholders": {"error": {"type": "String"}}},
   "scanSavingDocument": "Saving...",
   "@scanSavingDocument": {
     "description": "Progress label while combining pages into a PDF and saving"
@@ -253,6 +259,8 @@
   "@editorShare": {
     "description": "Tooltip/label for the share action"
   },
+  "editorViewImage": "View image",
+  "@editorViewImage": {"description": "Button to open an image document in the viewer"},
   "editorViewPdf": "View PDF",
   "@editorViewPdf": {
     "description": "Button to open the full PDF viewer"

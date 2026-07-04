@@ -418,8 +418,16 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                 PdfViewerScreen(path: document.localPath),
                           ),
                         ),
-                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                  label: Text(l10n.editorViewPdf),
+                  icon: Icon(
+                    document.fileType == 'image'
+                        ? Icons.image_outlined
+                        : Icons.picture_as_pdf_outlined,
+                  ),
+                  label: Text(
+                    document.fileType == 'image'
+                        ? l10n.editorViewImage
+                        : l10n.editorViewPdf,
+                  ),
                 ),
               ),
             ],

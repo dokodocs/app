@@ -58,6 +58,14 @@ ColorFilter? previewColorFilter(String filter) {
         0, 0, f, 0, t, //
         0, 0, 0, 1, 0, //
       ]);
+    case 'warm':
+      // Lift red, ease off blue (matches the 'warm' export offsets).
+      return const ColorFilter.matrix(<double>[
+        1.05, 0, 0, 0, 18, //
+        0, 1.0, 0, 0, 4, //
+        0, 0, 0.92, 0, -18, //
+        0, 0, 0, 1, 0, //
+      ]);
     case 'original':
     default:
       return null;

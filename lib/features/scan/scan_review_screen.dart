@@ -41,7 +41,10 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
       );
     } catch (_) {
       // Google Play services / ML Kit unavailable — fall back to basic camera.
-      final shot = await ImagePicker().pickImage(source: ImageSource.camera);
+      final shot = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
       if (shot == null) return;
       paths = [shot.path];
     }
@@ -57,7 +60,10 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
         noOfPages: 1,
       );
     } catch (_) {
-      final shot = await ImagePicker().pickImage(source: ImageSource.camera);
+      final shot = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
       if (shot == null) return;
       paths = [shot.path];
     }
@@ -127,6 +133,15 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
           ),
         ),
       );
+    } catch (error) {
+      // Previously any failure here (e.g. a gallery image the decoder can't
+      // read) threw silently and the document just never appeared — looking
+      // like "import from gallery can't save". Surface it instead.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.scanSaveFailed('$error'))),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

@@ -24,6 +24,7 @@ class FilterPicker extends StatelessWidget {
       'lighten': l10n.scanFilterLighten,
       'enhance': l10n.scanFilterEnhance,
       'high_contrast': l10n.scanFilterHighContrast,
+      'warm': l10n.scanFilterWarm,
     };
 
     return SizedBox(

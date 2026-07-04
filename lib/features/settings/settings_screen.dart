@@ -148,6 +148,10 @@ class SettingsScreen extends ConsumerWidget {
                     value: 'high_contrast',
                     child: Text(l10n.scanFilterHighContrast),
                   ),
+                  DropdownMenuItem(
+                    value: 'warm',
+                    child: Text(l10n.scanFilterWarm),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value != null) {

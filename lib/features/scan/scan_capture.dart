@@ -176,7 +176,11 @@ Future<List<String>> _captureWithBasicCamera(int noOfPages) async {
   final paths = <String>[];
   final batch = noOfPages != 1;
   while (true) {
-    final shot = await picker.pickImage(source: ImageSource.camera);
+    final shot = await picker.pickImage(
+      source: ImageSource.camera,
+      // Documents are shot with the rear camera — never default to selfie.
+      preferredCameraDevice: CameraDevice.rear,
+    );
     if (shot == null) break; // user backed out of the camera
     paths.add(shot.path);
     if (!batch) break; // single-page mode: one shot only
