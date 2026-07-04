@@ -2,12 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../../core/widgets/empty_state.dart';
 import 'signature_draw_screen.dart';
+import 'signature_import_screen.dart';
 
 /// Manages saved signatures, and doubles as a picker. When [picking] is true,
 /// tapping a signature pops it back to the caller (used by the editor to
@@ -18,8 +20,51 @@ class SignaturesScreen extends ConsumerWidget {
   final bool picking;
 
   Future<void> _addSignature(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.draw_outlined),
+              title: Text(l10n.signatureDraw),
+              subtitle: Text(l10n.signatureDrawHint),
+              onTap: () => Navigator.of(sheetContext).pop('draw'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(l10n.signatureImportGallery),
+              onTap: () => Navigator.of(sheetContext).pop('gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(l10n.signatureImportCamera),
+              onTap: () => Navigator.of(sheetContext).pop('camera'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+
+    if (choice == 'draw') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SignatureDrawScreen()),
+      );
+      return;
+    }
+
+    final picked = await ImagePicker().pickImage(
+      source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+      preferredCameraDevice: CameraDevice.rear,
+    );
+    if (picked == null || !context.mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SignatureDrawScreen()),
+      MaterialPageRoute(
+        builder: (_) => SignatureImportScreen(sourcePath: picked.path),
+      ),
     );
   }
 

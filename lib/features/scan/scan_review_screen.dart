@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
+import '../editor/editor_screen.dart';
 import 'document_builder.dart';
 import 'filter_preview.dart';
 import 'providers/scan_session_provider.dart';
@@ -117,22 +119,7 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
       ref.read(scanSessionProvider.notifier).clear();
       if (!mounted) return;
 
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(title),
-          action: SnackBarAction(
-            label: l10n.commonShare,
-            onPressed: () {
-              SharePlus.instance.share(
-                ShareParams(
-                  files: [for (final d in documents) XFile(d.localPath)],
-                ),
-              );
-            },
-          ),
-        ),
-      );
+      await _showPostSaveSheet(title, documents);
     } catch (error) {
       // Previously any failure here (e.g. a gallery image the decoder can't
       // read) threw silently and the document just never appeared — looking
@@ -145,6 +132,73 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// After a successful save, offer to Open the new document, Share it, or
+  /// Close back to Home — with an explicit close (✕) affordance. Replaces the
+  /// old fire-and-forget snackbar.
+  Future<void> _showPostSaveSheet(
+    String title,
+    List<Document> documents,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final first = documents.first;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.check_circle, color: Colors.green),
+              title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(l10n.scanSavedBody),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: l10n.dialogClose,
+                onPressed: () => Navigator.of(sheetContext).pop(),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(
+                first.fileType == 'image'
+                    ? Icons.image_outlined
+                    : Icons.picture_as_pdf_outlined,
+              ),
+              title: Text(l10n.scanOpen),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditorScreen(documentId: first.id),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.ios_share),
+              title: Text(l10n.commonShare),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                SharePlus.instance.share(
+                  ShareParams(
+                    files: [for (final d in documents) XFile(d.localPath)],
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: Text(l10n.scanDone),
+              onTap: () => Navigator.of(sheetContext).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   /// Prompts for a document name, prefilled with `dokodocs_<epoch>` (the
