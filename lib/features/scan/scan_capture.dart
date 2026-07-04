@@ -92,12 +92,19 @@ Future<void> _runCapture(
       );
     }
   } catch (error) {
-    // Surface the failure instead of silently doing nothing — this is what
-    // made "camera not working" look like a dead button on devices where the
-    // ML Kit scanner / Google Play services is unavailable or out of date.
-    if (!context.mounted) return;
-    _showScannerError(context, isGallery: isGallery);
-    return;
+    // The ML Kit document scanner requires up-to-date Google Play services and
+    // fails outright on devices/emulators without it — the "cannot open
+    // camera / Google Play services issue". Rather than dead-end with an
+    // error, fall back to the plain system camera (image_picker) so the user
+    // can still capture a page. Gallery import has no such dependency.
+    if (isGallery) {
+      if (!context.mounted) return;
+      _showScannerError(context, isGallery: true);
+      return;
+    }
+    final fallback = await _captureWithBasicCamera(noOfPages);
+    if (fallback.isEmpty) return; // user cancelled the fallback camera
+    paths = fallback;
   }
 
   if (paths == null || paths.isEmpty) return; // user cancelled
@@ -158,6 +165,23 @@ Future<ScanChoice?> _chooseScanMode(BuildContext context) {
       ),
     ),
   );
+}
+
+/// Basic-camera fallback used when the ML Kit document scanner is unavailable
+/// (missing/outdated Google Play services). Captures one photo per shot; for
+/// batch mode ([noOfPages] > 1) it keeps offering to snap another until the
+/// user cancels. Returns the captured file paths (empty if none).
+Future<List<String>> _captureWithBasicCamera(int noOfPages) async {
+  final picker = ImagePicker();
+  final paths = <String>[];
+  final batch = noOfPages != 1;
+  while (true) {
+    final shot = await picker.pickImage(source: ImageSource.camera);
+    if (shot == null) break; // user backed out of the camera
+    paths.add(shot.path);
+    if (!batch) break; // single-page mode: one shot only
+  }
+  return paths;
 }
 
 void _showScannerError(BuildContext context, {required bool isGallery}) {

@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import 'document_builder.dart';
+import 'filter_preview.dart';
 import 'providers/scan_session_provider.dart';
 import 'widgets/filter_picker.dart';
 
@@ -38,8 +40,10 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
         scannerSource: ScannerSource.camera,
       );
     } catch (_) {
-      _showScannerError();
-      return;
+      // Google Play services / ML Kit unavailable — fall back to basic camera.
+      final shot = await ImagePicker().pickImage(source: ImageSource.camera);
+      if (shot == null) return;
+      paths = [shot.path];
     }
     if (paths == null || paths.isEmpty) return;
     ref.read(scanSessionProvider.notifier).addPaths(paths);
@@ -53,20 +57,14 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
         noOfPages: 1,
       );
     } catch (_) {
-      _showScannerError();
-      return;
+      final shot = await ImagePicker().pickImage(source: ImageSource.camera);
+      if (shot == null) return;
+      paths = [shot.path];
     }
     if (paths == null || paths.isEmpty) return;
     ref
         .read(scanSessionProvider.notifier)
         .replaceAt(_selectedIndex, paths.first);
-  }
-
-  void _showScannerError() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).scanScannerError)),
-    );
   }
 
   void _deleteSelected() {
@@ -237,9 +235,12 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
                   child: InteractiveViewer(
                     child: Transform.rotate(
                       angle: selectedPage.rotation * 3.1415926535 / 180,
-                      child: Image.file(
-                        File(selectedPage.imagePath),
-                        fit: BoxFit.contain,
+                      child: filteredPreview(
+                        filter: selectedPage.filter,
+                        child: Image.file(
+                          File(selectedPage.imagePath),
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                   ),
@@ -321,9 +322,12 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.file(
-                        File(page.imagePath),
-                        fit: BoxFit.cover,
+                      child: filteredPreview(
+                        filter: page.filter,
+                        child: Image.file(
+                          File(page.imagePath),
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),

@@ -492,7 +492,20 @@ class _PageList extends StatelessWidget {
               ),
               ReorderableDragStartListener(
                 index: index,
-                child: const Icon(Icons.drag_handle),
+                child: Tooltip(
+                  message: l10n.editorReorderHint,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 26,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

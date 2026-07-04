@@ -101,6 +101,8 @@ flutter:
   generate: true # flutter gen-l10n, config in l10n.yaml
   assets:
     - assets/icon/
+    # Soft basket-weave cover shown behind the Home screen.
+    - assets/background.png
     # In-app branding + illustrations. Prefer SVG (flutter_svg) or WebP to
     # keep the APK under the 40MB Nepal target — see docs/BRAND.md.
     - assets/logo/

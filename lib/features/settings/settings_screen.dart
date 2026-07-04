@@ -8,6 +8,7 @@ import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../onboarding/onboarding_flow.dart';
 import 'providers/settings_provider.dart';
+import 'system_status_section.dart';
 
 /// Phase 1 scope: theme, language, scan defaults, storage mode (read-only,
 /// fixed to Local until Phase 2 ships connectors). Security section
@@ -160,7 +161,15 @@ class SettingsScreen extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.branding_watermark_outlined),
               title: Text(l10n.settingsWatermarkBatch),
-              subtitle: Text(l10n.settingsWatermarkAlwaysOnBody),
+              trailing: IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: l10n.moreInfo,
+                onPressed: () => _showInfoDialog(
+                  context,
+                  l10n.settingsWatermarkInfoTitle,
+                  l10n.settingsWatermarkInfoBody,
+                ),
+              ),
             ),
             ListTile(
               title: Text(l10n.settingsWatermarkPosition),
@@ -190,13 +199,31 @@ class SettingsScreen extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.smartphone),
               title: Text(l10n.settingsStorageLocal),
-              subtitle: Text(l10n.settingsStorageLocalBody),
+              trailing: IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: l10n.moreInfo,
+                onPressed: () => _showInfoDialog(
+                  context,
+                  l10n.settingsStorageInfoTitle,
+                  l10n.settingsStorageInfoBody,
+                ),
+              ),
             ),
+            const Divider(),
+            const SystemStatusSection(),
             const Divider(),
             _SectionHeader(l10n.settingsAbout),
             ListTile(
               title: Text(l10n.appTitle),
               subtitle: Text(l10n.settingsAboutBody),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl(context, 'https://dokodocs.com'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.language_outlined),
+              title: Text(l10n.settingsVisitWebsite),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl(context, 'https://dokodocs.com'),
             ),
             ListTile(
               leading: const Icon(Icons.replay_outlined),
@@ -240,6 +267,29 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Shows a simple titled info dialog — used by the (i) buttons that reveal
+/// details on demand instead of crowding the row with a long subtitle.
+Future<void> _showInfoDialog(
+  BuildContext context,
+  String title,
+  String body,
+) {
+  final l10n = AppLocalizations.of(context);
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(l10n.dialogClose),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Opens [url] in an external browser, surfacing a snackbar if it can't be

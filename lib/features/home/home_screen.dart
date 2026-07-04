@@ -11,6 +11,7 @@ import '../../core/widgets/empty_state.dart';
 import '../editor/editor_screen.dart';
 import '../folders/folder_documents_screen.dart';
 import '../scan/scan_capture.dart';
+import '../tools/document_multi_select_screen.dart';
 import 'all_documents_screen.dart';
 import 'widgets/document_tile.dart';
 import 'widgets/home_tagline.dart';
@@ -91,13 +92,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onChanged: (value) => setState(() => _query = value.trim()),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: l10n.homeShareMultiple,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const DocumentMultiSelectScreen(
+                  action: MultiSelectAction.share,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      // Subtle tiled doko (Nepali basket) pattern behind the whole home body.
+      // Soft basket-weave cover behind the whole home body: a single scaled
+      // image (not a hard tile) kept faint so content stays readable.
       body: Container(
         decoration: const BoxDecoration(
+          color: Color(0xFFF7F9F8),
           image: DecorationImage(
-            image: AssetImage('assets/patterns/doko_bg.png'),
-            repeat: ImageRepeat.repeat,
+            image: AssetImage('assets/background.png'),
+            fit: BoxFit.cover,
+            opacity: 0.5,
           ),
         ),
         child: SafeArea(

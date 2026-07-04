@@ -173,5 +173,28 @@
   "signaturePlaceHint": "सार्न ड्र्याग गर्नुहोस्, त्यसपछि लागू गर्नुहोस्",
   "signatureApply": "लागू गर्नुहोस्",
   "signatureDeleted": "हस्ताक्षर मेटियो",
-  "editorAddSignature": "हस्ताक्षर थप्नुहोस्"
+  "editorAddSignature": "हस्ताक्षर थप्नुहोस्",
+
+  "settingsWatermarkInfoTitle": "वाटरमार्कबारे",
+  "settingsWatermarkInfoBody": "प्रत्येक निर्यात गरिएको PDF र तस्बिरको कुनामा सानो, धमिलो DokoDocs चिन्ह हुन्छ। यसले DokoDocs लाई निःशुल्क र खुला राख्न मद्दत गर्छ। चिन्ह जानाजानी हल्का र नरम बनाइएको छ; तल कुन कुनामा राख्ने भनी छान्न सक्नुहुन्छ।",
+  "settingsStorageInfoTitle": "स्थानीय भण्डारणबारे",
+  "settingsStorageInfoBody": "तपाईंका सबै कागजातहरू यही यन्त्रमा मात्र रहन्छन्। कुनै पनि सर्भरमा अपलोड हुँदैन। तपाईंको डेटा तपाईंकै हो — सेयर वा निर्यात गरेर आफैँ ब्याकअप गर्नुहोस्। क्लाउड सिंक पछिको संस्करणमा आउँदैछ।",
+  "settingsVisitWebsite": "dokodocs.com हेर्नुहोस्",
+  "moreInfo": "थप जानकारी",
+  "dialogClose": "बन्द गर्नुहोस्",
+  "homeShareMultiple": "कागजातहरू सेयर गर्नुहोस्",
+  "editorReorderHint": "पृष्ठहरू पुनः क्रमबद्ध गर्न ड्र्याग गर्नुहोस्",
+
+  "settingsSystemStatus": "यन्त्र स्थिति",
+  "statusCamera": "क्यामेरा",
+  "statusDocumentScanner": "कागजात स्क्यानर",
+  "statusDocumentScannerBody": "Google Play services प्रयोग गर्छ। उपलब्ध नभए साधारण क्यामेरा प्रयोग हुन्छ।",
+  "statusLocalStorage": "स्थानीय भण्डारण",
+  "statusAvailable": "उपलब्ध",
+  "statusPermissionNeeded": "अनुमति आवश्यक",
+  "statusUnknown": "परीक्षण गरिएको छैन",
+  "statusTest": "परीक्षण",
+  "statusRefresh": "पुनः जाँच",
+  "statusScannerOk": "यस यन्त्रमा स्क्यानर काम गर्छ",
+  "statusScannerFail": "स्क्यानर उपलब्ध छैन — साधारण क्यामेरा प्रयोग हुनेछ"
 }

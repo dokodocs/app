@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import 'core/l10n/app_localizations.dart';
 import 'core/navigation/app_shell.dart';
@@ -8,6 +9,11 @@ import 'features/onboarding/onboarding_flow.dart';
 import 'features/settings/providers/settings_provider.dart';
 
 void main() {
+  // pdfrx 2.x requires an explicit one-time initialization before any
+  // PdfViewer is built; without it the native/pdfium backend never loads and
+  // the viewer renders blank (the "PDF preview not seen" bug).
+  WidgetsFlutterBinding.ensureInitialized();
+  pdfrxFlutterInitialize();
   runApp(const ProviderScope(child: DokoDocsApp()));
 }
 

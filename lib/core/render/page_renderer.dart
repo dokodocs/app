@@ -126,9 +126,10 @@ void _drawCornerWatermark(
   final padding = (image.width * 0.02).round();
   final isTop = position == 'top_right';
 
-  // Fonts: the wordmark ~ nearest to 4% of width, tagline one step smaller.
-  final wordFont = _fontForHeight(image.width * 0.04);
-  final tagFont = _fontForHeight(image.width * 0.022);
+  // Fonts: small and unobtrusive — the wordmark ~2.6% of width, tagline one
+  // step smaller. Kept deliberately tiny so it reads as a faint mark.
+  final wordFont = _fontForHeight(image.width * 0.026);
+  final tagFont = _fontForHeight(image.width * 0.016);
   final wordH = wordFont.lineHeight.toDouble();
   final tagH = tagFont.lineHeight.toDouble();
   final wordW = _watermarkText.length * wordH * 0.6;
@@ -141,8 +142,10 @@ void _drawCornerWatermark(
     if (decoded != null) {
       final target = (wordH * 1.3).round().clamp(12, image.width);
       logo = img.copyResize(decoded, width: target, height: target);
-      // Knock the mark back to ~40% opacity so it reads as a watermark.
-      _fadeAlpha(logo, 0.40);
+      // Desaturate to grayscale and knock back to ~25% opacity so the mark
+      // reads as a faint black-and-white watermark, not a coloured logo.
+      img.grayscale(logo);
+      _fadeAlpha(logo, 0.25);
     }
   }
 
@@ -163,7 +166,8 @@ void _drawCornerWatermark(
   }
 
   final textX = left + logoW + gap;
-  final color = img.ColorRgba8(46, 125, 107, 200);
+  // Dim neutral gray (black-and-white), semi-transparent so it stays faint.
+  final color = img.ColorRgba8(80, 80, 80, 130);
   img.drawString(
     image,
     _watermarkText,
