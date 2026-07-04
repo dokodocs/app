@@ -1,0 +1,119 @@
+name: dokodocs
+description: >
+  DokoDocs — an open-source, local-first, self-hostable document scanner
+  and PDF toolkit. Scan. Organize. Sync. Own Your Data.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+# Dependency scope note: this pubspec intentionally only carries what Phase 0
+# (foundation) needs to compile and boot to an empty home screen. Camera,
+# image processing, PDF, auth, and connector packages from spec Section 2.1
+# are added at the start of the phase that first uses them (see
+# docs/ROADMAP.md) rather than bloating the app / build graph up front.
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management (spec 2.1) — classic (non-codegen) Riverpod API for now;
+  # riverpod_annotation/riverpod_generator are a Phase-1 decision (not in
+  # spec Section 2 as named packages), flagged in docs/DEPENDENCIES.md
+  # rather than added silently, per the Stop Conditions in the Claude Code
+  # prompt.
+  flutter_riverpod: ^3.3.2
+
+  # Local DB (spec 2.1 — drift over sqflite for migrations on a growing
+  # schema). drift_flutter is the mechanical Flutter bridge for drift (drift
+  # core is Dart-only and cannot open a platform DB connection on its own) —
+  # see docs/DEPENDENCIES.md.
+  drift: ^2.34.0
+  drift_flutter: ^0.3.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # i18n (Nepal override: en + ne from Phase 0) — mechanical companion to
+  # flutter_localizations/gen-l10n, not a new architectural dependency.
+  intl: ^0.20.2
+
+  # Phase 1 — scan capture/edge-detect. Your pick over flutter_doc_scanner /
+  # custom camera+opencv_dart (docs/DEPENDENCIES.md): wraps Android ML Kit
+  # Document Scanner + iOS VisionKit, actively maintained, verified publisher.
+  cunning_document_scanner: ^2.5.0
+
+  # Phase 1 — filters (Original/Grayscale/B&W/brightness-contrast), spec-named.
+  image: ^4.9.1
+
+  # Phase 1 — PDF create (spec-named) and view. pdfrx chosen over
+  # syncfusion_flutter_pdfviewer per the Nepal override's open-source
+  # preference (docs/DEPENDENCIES.md).
+  pdf: ^3.13.0
+  pdfrx: ^2.4.4
+
+  # Phase 1 — share/print/permissions, all spec-named.
+  share_plus: ^13.2.0
+  printing: ^5.15.0
+  permission_handler: ^12.0.3
+
+  # Phase 1 — auth (spec-named). Guest mode is the fully functional path;
+  # these are wired to real SDK calls but require OAuth console setup we
+  # can't perform here — see docs/PHASE_1_SUMMARY.md manual checklist.
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^8.1.0
+
+  # Dual-calendar dates (Nepal override): pure-Dart Bikram Sambat <-> AD
+  # conversion + Nepali month names + Devanagari digits. The single new
+  # dependency for the batch/versioning/calendar/home upgrade pass —
+  # confirmed before adding. See docs/DEPENDENCIES.md.
+  nepali_utils: ^3.0.8
+  # In-app SVG rendering (logo). See docs/DEPENDENCIES.md.
+  flutter_svg: ^2.3.0
+  # Open external URLs (privacy policy + social links in Settings).
+  url_launcher: ^6.3.0
+  # On-canvas signature capture (draw pad) for the signature feature.
+  signature: ^5.5.0
+  # Multi-image gallery import — the native document scanner's gallery mode
+  # only picks one image at a time; pickMultiImage() lets the user select
+  # many photos at once to build a multi-page document.
+  image_picker: ^1.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # drift code generation (mechanical requirement to use drift at all)
+  build_runner: ^2.7.1
+  drift_dev: ^2.34.0
+
+  # App launcher icon generation — the "First-Launch Journey" prompt's own ask.
+  flutter_launcher_icons: ^0.14.4
+
+  # Directly imported in test/scan_pipeline_test.dart to fake path_provider
+  # in a plain Dart test (no platform channel available there).
+  path_provider_platform_interface: ^2.1.2
+
+flutter:
+  uses-material-design: true
+  generate: true # flutter gen-l10n, config in l10n.yaml
+  assets:
+    - assets/icon/
+    # In-app branding + illustrations. Prefer SVG (flutter_svg) or WebP to
+    # keep the APK under the 40MB Nepal target — see docs/BRAND.md.
+    - assets/logo/
+    - assets/illustrations/
+    - assets/patterns/
+    # Note: assets/splash/ is consumed by flutter_native_splash config, and
+    # assets/store/ is marketing-only — neither is bundled here on purpose.
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon_1024.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#2E7D6B"
+  adaptive_icon_foreground: "assets/icon/icon_foreground_1024.png"
+  remove_alpha_ios: true

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DokoDocs Splash Screen</title>
+    <!-- We are not loading Tailwind here to strictly control the exact brand colors and typography per guidelines -->
+    <style>
+        :root {
+            --color-primary: #2E7D6B;
+            --color-accent: #D98F3D;
+            --color-ink: #1E2422;
+            --color-background: #F7F9F8;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            background-color: var(--color-background);
+            font-family: var(--font-family);
+            overflow: hidden; /* Prevent scrolling on splash */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .splash-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M54.627 0l.83.83v58.34h-58.34l-.83-.83L0 54.628l.83-.83H58.34v-58.34l.83-.83zM27.314 0l.83.83v29.17h-29.17l-.83-.83L0 27.314l.83-.83H29.17v-29.17l.83-.83z' fill='%232E7D6B' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
+            background-size: 80px 80px;
+        }
+
+        .logo-mark {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 24px;
+            position: relative;
+        }
+
+        .basket-group {
+            transform-origin: center 90px;
+            animation: basketPop 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .doc-back {
+            animation: docDrop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
+        }
+
+        .doc-front {
+            animation: docDrop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards;
+        }
+
+        .wordmark {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+            color: var(--color-primary);
+            font-size: 38px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 1.1s forwards;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        .wordmark span.docs {
+            font-weight: 400;
+            color: var(--color-ink);
+        }
+
+        .tagline {
+            margin-top: 16px;
+            color: var(--color-ink);
+            font-size: 15px;
+            font-weight: 400;
+            opacity: 0.8;
+            letter-spacing: 0.2px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .tagline-word {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        /* Staggered animation delays for tagline words */
+        .w1 { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.3s forwards; }
+        .w2 { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.4s forwards; }
+        .w3 { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.5s forwards; }
+        .w4 { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.6s forwards; }
+        .w5 { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 1.7s forwards; }
+
+        @keyframes basketPop {
+            0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        @keyframes docDrop {
+            0% { transform: translateY(-70px); opacity: 0; }
+            40% { opacity: 1; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .logo-mark { width: 130px; height: 130px; }
+            .wordmark { font-size: 34px; }
+            .tagline { font-size: 14px; }
+        }
+    </style>
+    <!-- Load Inter font for clean typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="splash-container">
+        
+        <div class="logo-mark">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+                
+                <!-- Docs Group (Animated to drop in) -->
+                <g id="docs">
+                    <!-- Back Doc (White with Teal Outline) -->
+                    <g class="doc-back" transform="translate(0, -80)" opacity="0">
+                        <path d="M 30 25 H 70 V 80 H 30 Z" fill="var(--color-background)" stroke="var(--color-primary)" stroke-width="6" stroke-linejoin="round"/>
+                        <line x1="42" y1="40" x2="58" y2="40" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round"/>
+                        <line x1="42" y1="52" x2="58" y2="52" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round"/>
+                    </g>
+
+                    <!-- Front Doc (White with Teal Outline, Folded Corner) -->
+                    <g class="doc-front" transform="translate(0, -80)" opacity="0">
+                        <path d="M 42 38 H 72 L 87 53 V 90 H 42 Z" fill="var(--color-background)" stroke="var(--color-primary)" stroke-width="6" stroke-linejoin="round"/>
+                        <path d="M 72 38 V 53 H 87" fill="none" stroke="var(--color-primary)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+                        <line x1="54" y1="62" x2="75" y2="62" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round"/>
+                        <line x1="54" y1="74" x2="66" y2="74" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round"/>
+                    </g>
+                </g>
+
+                <!-- Basket (Foreground to hide bottoms of docs) -->
+                <g id="basket" class="basket-group">
+                    <!-- Clip path for the weave to keep it strictly inside the basket body -->
+                    <defs>
+                        <path id="basket-body" d="M 26 82 C 30 108, 40 114, 46 114 H 74 C 80 114, 90 108, 94 82 Z" />
+                        <clipPath id="basket-clip">
+                            <use href="#basket-body" />
+                        </clipPath>
+                    </defs>
+
+                    <!-- Basket Background Fill -->
+                    <use href="#basket-body" fill="var(--color-background)" stroke="var(--color-primary)" stroke-width="6" stroke-linejoin="round"/>
+
+                    <!-- Weave Pattern -->
+                    <g clip-path="url(#basket-clip)" stroke="var(--color-primary)" stroke-width="4" stroke-linecap="round" opacity="0.9">
+                        <!-- Diagonal Lines Right -->
+                        <line x1="10" y1="75" x2="60" y2="125" />
+                        <line x1="30" y1="75" x2="80" y2="125" />
+                        <line x1="50" y1="75" x2="100" y2="125" />
+                        <line x1="70" y1="75" x2="120" y2="125" />
+                        <line x1="90" y1="75" x2="140" y2="125" />
+                        <!-- Diagonal Lines Left -->
+                        <line x1="110" y1="75" x2="60" y2="125" />
+                        <line x1="90" y1="75" x2="40" y2="125" />
+                        <line x1="70" y1="75" x2="20" y2="125" />
+                        <line x1="50" y1="75" x2="0" y2="125" />
+                        <line x1="30" y1="75" x2="-20" y2="125" />
+                    </g>
+
+                    <!-- Basket Top Rim -->
+                    <rect x="18" y="70" width="84" height="12" rx="6" fill="var(--color-background)" stroke="var(--color-primary)" stroke-width="6" stroke-linejoin="round"/>
+                </g>
+            </svg>
+        </div>
+
+        <div class="wordmark">
+            Doko<span class="docs">Docs</span>
+        </div>
+
+        <div class="tagline">
+            <span class="tagline-word w1">You</span>
+            <span class="tagline-word w2">carry</span>
+            <span class="tagline-word w3">your</span>
+            <span class="tagline-word w4">own</span>
+            <span class="tagline-word w5">documents.</span>
+        </div>
+
+    </div>
+
+</body>
+</html>

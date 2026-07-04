@@ -1,0 +1,23 @@
+<svg viewBox="0 0 560 160" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon: simplified basket (doko) with a document peeking out -->
+  <g transform="translate(20,20)">
+    <!-- basket body -->
+    <path d="M10 55 L20 115 Q60 128 100 115 L110 55 Q60 40 10 55 Z" fill="#1E3A5F"/>
+    <!-- basket weave lines -->
+    <path d="M22 62 L30 112" stroke="#F8FAFC" stroke-width="3" opacity="0.35"/>
+    <path d="M45 66 L50 118" stroke="#F8FAFC" stroke-width="3" opacity="0.35"/>
+    <path d="M68 66 L64 118" stroke="#F8FAFC" stroke-width="3" opacity="0.35"/>
+    <path d="M90 62 L82 112" stroke="#F8FAFC" stroke-width="3" opacity="0.35"/>
+    <!-- basket rim -->
+    <ellipse cx="60" cy="52" rx="52" ry="12" fill="#16528A"/>
+    <!-- document peeking out -->
+    <rect x="42" y="0" width="36" height="46" rx="3" fill="#F8FAFC" stroke="#D97706" stroke-width="3"/>
+    <line x1="49" y1="12" x2="71" y2="12" stroke="#D97706" stroke-width="2.5"/>
+    <line x1="49" y1="20" x2="71" y2="20" stroke="#D97706" stroke-width="2.5"/>
+    <line x1="49" y1="28" x2="63" y2="28" stroke="#D97706" stroke-width="2.5"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="150" y="98" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-size="58" font-weight="700" fill="#1E3A5F">Doko</text>
+  <text x="290" y="98" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-size="58" font-weight="400" fill="#D97706">Docs</text>
+</svg>

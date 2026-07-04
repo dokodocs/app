@@ -1,0 +1,477 @@
+{
+  "@@locale": "en",
+  "appTitle": "DokoDocs",
+  "@appTitle": {
+    "description": "The application name, shown in the app bar and splash/home screen"
+  },
+  "onboardingLocalFirstTitle": "Your documents. Your device.",
+  "@onboardingLocalFirstTitle": {
+    "description": "Onboarding headline explaining the local-first model"
+  },
+  "onboardingLocalFirstBody": "DokoDocs keeps your files on your device by default. You choose if and where anything ever syncs.",
+  "@onboardingLocalFirstBody": {
+    "description": "Onboarding body text explaining the local-first model"
+  },
+  "onboardingContinue": "Continue",
+  "@onboardingContinue": {
+    "description": "Button label to dismiss onboarding"
+  },
+  "onboardingTagline": "Scan. Organize. Sync. Own Your Data.",
+  "@onboardingTagline": {
+    "description": "Splash screen tagline"
+  },
+  "onboardingChooseLanguage": "Choose your language",
+  "@onboardingChooseLanguage": {
+    "description": "Language picker screen title"
+  },
+  "languageNameEnglish": "English",
+  "@languageNameEnglish": {
+    "description": "English language name shown in its own script regardless of active locale"
+  },
+  "languageNameNepali": "नेपाली",
+  "@languageNameNepali": {
+    "description": "Nepali language name shown in its own script regardless of active locale"
+  },
+  "onboardingSkip": "Skip",
+  "@onboardingSkip": {
+    "description": "Skip button on the onboarding value pages"
+  },
+  "onboardingPage1Title": "Scan anything",
+  "@onboardingPage1Title": {
+    "description": "Onboarding value page 1 title"
+  },
+  "onboardingPage1Body": "Documents, citizenship, certificates, bills — capture them all in seconds.",
+  "@onboardingPage1Body": {
+    "description": "Onboarding value page 1 body"
+  },
+  "onboardingPage3Title": "Sync only if YOU choose",
+  "@onboardingPage3Title": {
+    "description": "Onboarding value page 3 title"
+  },
+  "onboardingPage3Body": "Your server, your PC, your cloud — sync is always optional and always your call.",
+  "@onboardingPage3Body": {
+    "description": "Onboarding value page 3 body"
+  },
+  "onboardingPermissionPrimingTitle": "DokoDocs needs your camera",
+  "@onboardingPermissionPrimingTitle": {
+    "description": "Permission priming screen title, shown before the OS permission dialog"
+  },
+  "onboardingPermissionPrimingBody": "To scan documents, DokoDocs needs camera access. Nothing is ever uploaded automatically — scanning happens entirely on your device.",
+  "@onboardingPermissionPrimingBody": {
+    "description": "Permission priming screen body, explains why camera access is needed before the OS asks"
+  },
+  "onboardingStartScanning": "Start scanning",
+  "@onboardingStartScanning": {
+    "description": "Final onboarding button that lands the user on Home"
+  },
+  "settingsReplayIntro": "Replay intro",
+  "@settingsReplayIntro": {
+    "description": "Settings > About action to re-watch the onboarding flow"
+  },
+  "homeEmptyTitle": "Scan your first document",
+  "@homeEmptyTitle": {
+    "description": "Home empty-state title — invitation, not apology"
+  },
+  "homeEmptyBody": "Documents, receipts, certificates — get them organized in seconds.",
+  "@homeEmptyBody": {
+    "description": "Home empty-state one-line body"
+  },
+  "homeScanNow": "Scan now",
+  "@homeScanNow": {
+    "description": "Home empty-state primary action"
+  },
+  "homeImportFromGallery": "Import from gallery",
+  "@homeImportFromGallery": {
+    "description": "Home empty-state secondary action"
+  },
+  "homeSearchNoResultsTitle": "No matches",
+  "@homeSearchNoResultsTitle": {
+    "description": "Search-no-results empty-state title"
+  },
+  "homeSearchNoResultsBody": "Try a different name.",
+  "@homeSearchNoResultsBody": {
+    "description": "Search-no-results empty-state body"
+  },
+  "homeFoldersEmptyTitle": "Create your first folder",
+  "@homeFoldersEmptyTitle": {
+    "description": "Folders-empty-state title, reserved for the Folders tab (Stage B nav shell)"
+  },
+  "homeFoldersEmptyBody": "Group related documents together to find them faster.",
+  "@homeFoldersEmptyBody": {
+    "description": "Folders-empty-state body"
+  },
+  "navHome": "Home",
+  "@navHome": {"description": "Bottom nav destination label"},
+  "navFolders": "Folders",
+  "@navFolders": {"description": "Bottom nav destination label"},
+  "navTools": "Tools",
+  "@navTools": {"description": "Bottom nav destination label"},
+  "navSettings": "Settings",
+  "@navSettings": {"description": "Bottom nav destination label"},
+  "navScan": "Scan",
+  "@navScan": {"description": "Semantic label for the center scan FAB"},
+  "toolsCombineToPdf": "Combine to PDF",
+  "@toolsCombineToPdf": {"description": "Tools tile label"},
+  "toolsImportImages": "Import images → PDF",
+  "@toolsImportImages": {"description": "Tools tile label"},
+  "scanReviewTitle": "Review pages",
+  "@scanReviewTitle": {
+    "description": "App bar title on the multi-page scan review screen"
+  },
+  "scanRetake": "Retake",
+  "@scanRetake": {
+    "description": "Button to re-capture a page"
+  },
+  "scanDelete": "Delete",
+  "@scanDelete": {
+    "description": "Button to remove a page from the session"
+  },
+  "scanAddPage": "Add page",
+  "@scanAddPage": {
+    "description": "Button to capture another page in the same session"
+  },
+  "scanSave": "Save",
+  "@scanSave": {
+    "description": "Button to save the reviewed pages as a document"
+  },
+  "scanFilterOriginal": "Original",
+  "@scanFilterOriginal": {
+    "description": "Filter option: no processing"
+  },
+  "scanFilterGrayscale": "Grayscale",
+  "@scanFilterGrayscale": {
+    "description": "Filter option: grayscale"
+  },
+  "scanFilterBw": "B&W",
+  "@scanFilterBw": {
+    "description": "Filter option: high-contrast black and white"
+  },
+  "scanFilterLighten": "Lighten",
+  "@scanFilterLighten": {
+    "description": "Filter option: brightness boost only, for dim/underexposed scans"
+  },
+  "scanFilterEnhance": "Enhance",
+  "@scanFilterEnhance": {
+    "description": "Filter option: balanced brightness/contrast boost"
+  },
+  "scanFilterHighContrast": "High contrast",
+  "@scanFilterHighContrast": {
+    "description": "Filter option: contrast boost while keeping color, for colored backgrounds"
+  },
+  "scanNoPagesYet": "No pages captured",
+  "@scanNoPagesYet": {
+    "description": "Shown if the scan session is somehow empty"
+  },
+  "scanSavingDocument": "Saving...",
+  "@scanSavingDocument": {
+    "description": "Progress label while combining pages into a PDF and saving"
+  },
+  "scanCameraPermissionTitle": "Camera access needed",
+  "@scanCameraPermissionTitle": {
+    "description": "Title shown when camera permission was denied"
+  },
+  "scanCameraPermissionBody": "DokoDocs needs your camera to scan documents. Nothing is uploaded anywhere — scanning happens entirely on your device.",
+  "@scanCameraPermissionBody": {
+    "description": "Body text explaining why camera permission is needed, shown after denial"
+  },
+  "scanOpenSettings": "Open settings",
+  "@scanOpenSettings": {
+    "description": "Button to open the OS app settings screen after a permanent permission denial"
+  },
+  "scanTryAgain": "Try again",
+  "@scanTryAgain": {
+    "description": "Button to re-request a denied (but not permanently denied) permission"
+  },
+  "scanModeSingle": "Single page",
+  "@scanModeSingle": {
+    "description": "Page-mode chooser option: capture exactly one page"
+  },
+  "scanModeSingleBody": "Scan one page and finish.",
+  "@scanModeSingleBody": {
+    "description": "Page-mode chooser subtitle for single page"
+  },
+  "scanModeBatch": "Multiple pages",
+  "@scanModeBatch": {
+    "description": "Page-mode chooser option: capture as many pages as needed"
+  },
+  "scanModeBatchBody": "Keep capturing pages until you're done.",
+  "@scanModeBatchBody": {
+    "description": "Page-mode chooser subtitle for batch capture"
+  },
+  "scanModeGalleryBody": "Pick existing images to turn into a document.",
+  "@scanModeGalleryBody": {
+    "description": "Chooser subtitle for gallery import"
+  },
+  "scanScannerError": "Couldn't open the scanner. Make sure Google Play services is installed and up to date, then try again.",
+  "@scanScannerError": {
+    "description": "Shown when the native camera document scanner fails to open (e.g. Play services unavailable)"
+  },
+  "scanGalleryError": "Couldn't open the gallery. Check the app's photo permission in Settings and try again.",
+  "@scanGalleryError": {
+    "description": "Shown when the gallery import fails to open"
+  },
+  "scanSaveAsTitle": "Save as",
+  "@scanSaveAsTitle": {
+    "description": "Export-format chooser title shown before saving a scan"
+  },
+  "scanSaveAsPdf": "PDF",
+  "@scanSaveAsPdf": {
+    "description": "Export format option: combine all pages into one PDF"
+  },
+  "scanSaveAsPdfBody": "All pages combined into one PDF document.",
+  "@scanSaveAsPdfBody": {
+    "description": "Export format description for PDF"
+  },
+  "scanSaveAsJpeg": "JPEG",
+  "@scanSaveAsJpeg": {
+    "description": "Export format option: each page as its own JPEG image"
+  },
+  "scanSaveAsPng": "PNG",
+  "@scanSaveAsPng": {
+    "description": "Export format option: each page as its own PNG image"
+  },
+  "scanSaveAsImageBody": "Each page saved as its own image file.",
+  "@scanSaveAsImageBody": {
+    "description": "Export format description for JPEG/PNG"
+  },
+  "editorAddPage": "Add page",
+  "@editorAddPage": {
+    "description": "Editor action to scan and append more pages to an existing document"
+  },
+  "documentDefaultTitle": "Scan {date}",
+  "@documentDefaultTitle": {
+    "description": "Default title given to a newly saved document",
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "editorTitle": "Edit document",
+  "@editorTitle": {
+    "description": "App bar title on the document editor screen"
+  },
+  "editorShare": "Share",
+  "@editorShare": {
+    "description": "Tooltip/label for the share action"
+  },
+  "editorViewPdf": "View PDF",
+  "@editorViewPdf": {
+    "description": "Button to open the full PDF viewer"
+  },
+  "pdfViewerTitle": "Document",
+  "@pdfViewerTitle": {
+    "description": "App bar title on the PDF viewer screen"
+  },
+  "homeSearchHint": "Search documents",
+  "@homeSearchHint": {
+    "description": "Placeholder text in Home's search field"
+  },
+  "homeAllFolder": "All",
+  "@homeAllFolder": {
+    "description": "Chip label for the unfiltered/all-documents view"
+  },
+  "homeNewFolder": "New folder",
+  "@homeNewFolder": {
+    "description": "Chip/dialog label to create a new folder"
+  },
+  "dialogCancel": "Cancel",
+  "@dialogCancel": {
+    "description": "Generic dialog cancel button"
+  },
+  "dialogCreate": "Create",
+  "@dialogCreate": {
+    "description": "Generic dialog create/confirm button"
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {"description": "App bar title on Settings"},
+  "settingsAppearance": "Appearance",
+  "@settingsAppearance": {"description": "Settings section header"},
+  "settingsTheme": "Theme",
+  "@settingsTheme": {"description": "Theme setting label"},
+  "settingsThemeSystem": "System",
+  "@settingsThemeSystem": {"description": "Theme option: follow system"},
+  "settingsThemeLight": "Light",
+  "@settingsThemeLight": {"description": "Theme option: light"},
+  "settingsThemeDark": "Dark",
+  "@settingsThemeDark": {"description": "Theme option: dark"},
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {"description": "Language setting label"},
+  "settingsScanDefaults": "Scan defaults",
+  "@settingsScanDefaults": {"description": "Settings section header"},
+  "settingsDefaultQuality": "Quality",
+  "@settingsDefaultQuality": {"description": "Default scan quality setting label"},
+  "settingsQualityLow": "Low",
+  "@settingsQualityLow": {"description": "Quality option: low"},
+  "settingsQualityMedium": "Medium",
+  "@settingsQualityMedium": {"description": "Quality option: medium"},
+  "settingsQualityHigh": "High",
+  "@settingsQualityHigh": {"description": "Quality option: high"},
+  "settingsDefaultColorMode": "Default color mode",
+  "@settingsDefaultColorMode": {"description": "Default scan color mode setting label"},
+  "settingsStorage": "Storage & sync",
+  "@settingsStorage": {"description": "Settings section header"},
+  "settingsStorageLocal": "Local (this device)",
+  "@settingsStorageLocal": {"description": "Storage mode value shown in Phase 1"},
+  "settingsStorageLocalBody": "Your documents stay on this device. Cloud and server sync are coming in a future update — you'll always choose if and where anything syncs.",
+  "@settingsStorageLocalBody": {"description": "Explanation of the local-only storage mode"},
+  "settingsAbout": "About",
+  "@settingsAbout": {"description": "Settings section header"},
+  "settingsAboutBody": "Scan. Organize. Sync. Own Your Data.",
+  "@settingsAboutBody": {"description": "About section tagline"},
+  "settingsMadeWith": "Made with",
+  "@settingsMadeWith": {"description": "First part of the 'Made with ❤ in Nepal' credit"},
+  "settingsInNepal": "in Nepal",
+  "@settingsInNepal": {"description": "Second part of the 'Made with ❤ in Nepal' credit"},
+
+  "editorVersionHistory": "Version history",
+  "@editorVersionHistory": {"description": "Editor action opening version history"},
+  "editorEditPage": "Edit page",
+  "@editorEditPage": {"description": "Per-page edit action/sheet title"},
+  "editorRotate": "Rotate",
+  "@editorRotate": {"description": "Rotate the page 90 degrees"},
+  "editorRevertToOriginal": "Revert to original",
+  "@editorRevertToOriginal": {"description": "Reset a page to its original uncropped, unfiltered capture"},
+  "editorRevertedSnack": "Reverted to original",
+  "@editorRevertedSnack": {"description": "Confirmation shown after reverting a page"},
+  "scanNeedsReviewHint": "Check crop",
+  "@scanNeedsReviewHint": {"description": "Badge on a page kept as a full frame due to low edge-detection confidence"},
+
+  "versionHistoryTitle": "Version history",
+  "@versionHistoryTitle": {"description": "Version history screen title"},
+  "versionHistoryEmpty": "No versions yet",
+  "@versionHistoryEmpty": {"description": "Shown when a document has no saved versions"},
+  "versionPreviewTitle": "Version preview",
+  "@versionPreviewTitle": {"description": "Title of the read-only version preview screen"},
+  "versionRestore": "Restore this version",
+  "@versionRestore": {"description": "Button to make a past version current"},
+  "versionRestoredSnack": "Version restored",
+  "@versionRestoredSnack": {"description": "Confirmation after restoring a version"},
+  "versionChangeReordered": "Pages reordered",
+  "@versionChangeReordered": {"description": "Version change label"},
+  "versionChangeFilter": "Filter changed",
+  "@versionChangeFilter": {"description": "Version change label"},
+  "versionChangePageAdded": "Page added",
+  "@versionChangePageAdded": {"description": "Version change label"},
+  "versionChangePageRemoved": "Page removed",
+  "@versionChangePageRemoved": {"description": "Version change label"},
+  "versionChangeReverted": "Reverted to original",
+  "@versionChangeReverted": {"description": "Version change label"},
+  "versionChangeRestored": "Restored",
+  "@versionChangeRestored": {"description": "Version change label"},
+  "versionChangeWatermark": "Watermark changed",
+  "@versionChangeWatermark": {"description": "Version change label"},
+  "versionChangeEdited": "Edited",
+  "@versionChangeEdited": {"description": "Generic version change label"},
+
+  "settingsCalendar": "Calendar",
+  "@settingsCalendar": {"description": "Calendar system setting label"},
+  "settingsCalendarAd": "AD (English)",
+  "@settingsCalendarAd": {"description": "Gregorian calendar option"},
+  "settingsCalendarBs": "BS (नेपाली मिति)",
+  "@settingsCalendarBs": {"description": "Bikram Sambat calendar option"},
+  "settingsWatermarkBatch": "Watermark on batch scans",
+  "@settingsWatermarkBatch": {"description": "Batch watermark toggle label"},
+  "settingsWatermarkBatchBody": "Adds a small DokoDocs mark to batch-scanned pages.",
+  "@settingsWatermarkBatchBody": {"description": "Batch watermark toggle subtitle"},
+  "settingsWatermarkAlwaysOnBody": "The DokoDocs mark is always added to scanned pages.",
+  "@settingsWatermarkAlwaysOnBody": {"description": "Subtitle explaining the watermark is always on and not disableable"},
+  "settingsWatermarkSingle": "Watermark on single scans",
+  "@settingsWatermarkSingle": {"description": "Single-scan watermark toggle label"},
+  "settingsWatermarkPosition": "Watermark position",
+  "@settingsWatermarkPosition": {"description": "Watermark position setting label"},
+  "settingsWatermarkPosBottomRight": "Bottom-right",
+  "@settingsWatermarkPosBottomRight": {"description": "Watermark position option"},
+  "settingsWatermarkPosTopRight": "Top-right",
+  "@settingsWatermarkPosTopRight": {"description": "Watermark position option"},
+
+  "folderDefaultName": "My Documents",
+  "@folderDefaultName": {"description": "Name of the auto-created undeletable default folder"},
+  "homeTaglineLead": "Scan. Organize. Sync.",
+  "@homeTaglineLead": {"description": "First part of the Home tagline (muted)"},
+  "homeTaglineEmphasis": "Own Your Data.",
+  "@homeTaglineEmphasis": {"description": "Emphasized brand-green part of the Home tagline"},
+  "homeTaglineSecondary": "तपाईंको कागजात, तपाईंकै फोनमा",
+  "@homeTaglineSecondary": {"description": "Nepali secondary tagline line, shown in muted text under the main tagline in all locales"},
+  "homeRecent": "Recent",
+  "@homeRecent": {"description": "Home Recent section header"},
+  "homeRecentEmptyHint": "Scanned documents show up here.",
+  "@homeRecentEmptyHint": {"description": "One-line hint when there are folders but no recent documents"},
+  "homeFolders": "Folders",
+  "@homeFolders": {"description": "Home Folders section header"},
+  "homeSeeAll": "See all",
+  "@homeSeeAll": {"description": "Section 'see all' action"},
+  "homeAllDocuments": "All documents",
+  "@homeAllDocuments": {"description": "Title of the full library screen"},
+  "folderSetAsDefault": "Set as default save folder",
+  "@folderSetAsDefault": {"description": "Folder action: make this the default folder new scans save into"},
+  "folderIsDefault": "Default save folder",
+  "@folderIsDefault": {"description": "Shown on the folder that is already the default save folder"},
+  "folderSetDefaultDone": "Default save folder updated",
+  "@folderSetDefaultDone": {"description": "Confirmation after changing the default save folder"},
+  "folderRename": "Rename",
+  "@folderRename": {"description": "Folder action: rename"},
+  "folderDelete": "Delete",
+  "@folderDelete": {"description": "Folder action: delete"},
+  "folderDefaultCannotDelete": "The default folder can't be deleted.",
+  "@folderDefaultCannotDelete": {"description": "Shown when the user tries to delete the undeletable default folder"},
+  "dialogSave": "Save",
+  "@dialogSave": {"description": "Generic dialog save/confirm button"},
+
+  "commonShare": "Share",
+  "@commonShare": {"description": "Generic share action label"},
+
+  "scanSaveNameTitle": "Name your document",
+  "@scanSaveNameTitle": {"description": "Title of the dialog that asks the user to name a document before saving"},
+  "scanSaveNameHint": "Document name",
+  "@scanSaveNameHint": {"description": "Hint for the document name field"},
+
+  "settingsLegal": "Legal & Privacy",
+  "@settingsLegal": {"description": "Settings section header for legal and privacy links"},
+  "settingsPrivacyPolicy": "Privacy Policy",
+  "@settingsPrivacyPolicy": {"description": "Settings entry that opens the privacy policy"},
+  "settingsTerms": "Terms of Service",
+  "@settingsTerms": {"description": "Settings entry that opens the terms of service"},
+  "settingsConnect": "Connect",
+  "@settingsConnect": {"description": "Settings section header for social networking links"},
+
+  "toolsMergePdfs": "Merge PDFs",
+  "@toolsMergePdfs": {"description": "Tools tile: merge multiple documents into one PDF"},
+  "toolsShareMultiple": "Share documents",
+  "@toolsShareMultiple": {"description": "Tools tile: share multiple documents at once"},
+  "mergeSelectTitle": "Select documents to merge",
+  "@mergeSelectTitle": {"description": "Title of the multi-select merge screen"},
+  "shareSelectTitle": "Select documents to share",
+  "@shareSelectTitle": {"description": "Title of the multi-select share screen"},
+  "selectAtLeastTwo": "Select at least 2 documents.",
+  "@selectAtLeastTwo": {"description": "Validation shown when fewer than two documents are selected for merge"},
+  "selectAtLeastOne": "Select at least 1 document.",
+  "@selectAtLeastOne": {"description": "Validation shown when no documents are selected for sharing"},
+  "mergeAction": "Merge",
+  "@mergeAction": {"description": "Button that performs the merge"},
+  "mergeDoneSnack": "Merged document created",
+  "@mergeDoneSnack": {"description": "Confirmation after a merge completes"},
+  "selectedCount": "{count} selected",
+  "@selectedCount": {"description": "Count of selected documents", "placeholders": {"count": {"type": "int"}}},
+
+  "signatureTitle": "Signatures",
+  "@signatureTitle": {"description": "Signatures management screen title"},
+  "signatureAdd": "Add signature",
+  "@signatureAdd": {"description": "Action to add a signature"},
+  "signatureNew": "New signature",
+  "@signatureNew": {"description": "Action to create a new signature"},
+  "signatureDrawHint": "Draw your signature below",
+  "@signatureDrawHint": {"description": "Instruction on the signature draw pad"},
+  "signatureClear": "Clear",
+  "@signatureClear": {"description": "Clear the signature pad"},
+  "signatureNone": "No saved signatures yet",
+  "@signatureNone": {"description": "Empty state on the signatures screen"},
+  "signatureEmptyPad": "Please draw a signature first.",
+  "@signatureEmptyPad": {"description": "Shown when trying to save an empty signature pad"},
+  "signaturePlaceHint": "Drag to move, then tap Apply",
+  "@signaturePlaceHint": {"description": "Instruction while placing a signature on a page"},
+  "signatureApply": "Apply",
+  "@signatureApply": {"description": "Confirm placing the signature on the page"},
+  "signatureDeleted": "Signature deleted",
+  "@signatureDeleted": {"description": "Confirmation after deleting a saved signature"},
+  "editorAddSignature": "Add signature",
+  "@editorAddSignature": {"description": "Editor action to place a signature on the current document"}
+}
