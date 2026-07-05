@@ -126,6 +126,34 @@
   "@scanDelete": {
     "description": "Button to remove a page from the session"
   },
+  "scanCrop": "Crop",
+  "@scanCrop": {
+    "description": "Button that opens the manual crop / perspective editor for the selected page"
+  },
+  "cropTitle": "Adjust crop",
+  "@cropTitle": {
+    "description": "App bar title of the manual crop editor"
+  },
+  "cropInstruction": "Drag the corners to match the document edges",
+  "@cropInstruction": {
+    "description": "Hint shown in the crop editor telling the user to move the corner handles"
+  },
+  "cropReset": "Reset",
+  "@cropReset": {
+    "description": "Crop editor button that resets the four corners back to the full frame (auto)"
+  },
+  "cropConfirm": "Confirm",
+  "@cropConfirm": {
+    "description": "Crop editor button that applies the crop and perspective correction"
+  },
+  "cropProcessing": "Applying crop…",
+  "@cropProcessing": {
+    "description": "Progress label shown while the crop and perspective correction are applied"
+  },
+  "cropFailed": "Couldn't apply crop",
+  "@cropFailed": {
+    "description": "Error shown when the crop / perspective correction fails"
+  },
   "scanAddPage": "Add page",
   "@scanAddPage": {
     "description": "Button to capture another page in the same session"

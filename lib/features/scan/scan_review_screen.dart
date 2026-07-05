@@ -10,6 +10,7 @@ import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../editor/editor_screen.dart';
+import 'crop_editor_screen.dart';
 import 'document_builder.dart';
 import 'filter_preview.dart';
 import 'providers/scan_session_provider.dart';
@@ -73,6 +74,23 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
     ref
         .read(scanSessionProvider.notifier)
         .replaceAt(_selectedIndex, paths.first);
+  }
+
+  /// Opens the manual crop + perspective editor for the selected page and,
+  /// on confirm, replaces the page image with the corrected result. Fills the
+  /// gap for gallery imports and the basic-camera fallback, which arrive
+  /// without the native scanner's automatic edge-detection/crop.
+  Future<void> _cropSelected() async {
+    final pages = ref.read(scanSessionProvider);
+    if (pages.isEmpty) return;
+    final page = pages[_selectedIndex.clamp(0, pages.length - 1)];
+    final newPath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => CropEditorScreen(imagePath: page.imagePath),
+      ),
+    );
+    if (newPath == null || !mounted) return;
+    ref.read(scanSessionProvider.notifier).replaceAt(_selectedIndex, newPath);
   }
 
   void _deleteSelected() {
@@ -333,6 +351,11 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              TextButton.icon(
+                icon: const Icon(Icons.crop),
+                label: Text(l10n.scanCrop),
+                onPressed: _isSaving ? null : _cropSelected,
+              ),
               TextButton.icon(
                 icon: const Icon(Icons.rotate_right),
                 label: Text(l10n.editorRotate),
