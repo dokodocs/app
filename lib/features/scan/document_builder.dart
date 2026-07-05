@@ -55,31 +55,40 @@ Future<List<int>> saveScanSessionAsDocument({
   await docFolder.create(recursive: true);
 
   if (format == ExportFormat.pdf) {
-    final originalPaths = <String>[];
-    final processedPaths = <String>[];
+    // Copy the immutable originals first (cheap byte copies, kept for the
+    // revert/version feature), then render pages with BOUNDED parallelism —
+    // each renderPage runs in its own isolate, so a small concurrency cap
+    // (kMaxRenderConcurrency) turns the old one-at-a-time save into a parallel
+    // one without blowing the 2–3 GB RAM budget. Output order is preserved.
+    final originalPaths = [
+      for (var i = 0; i < pages.length; i++)
+        p.join(docFolder.path, 'original_$i.jpg'),
+    ];
     for (var i = 0; i < pages.length; i++) {
-      // Persist the immutable original (a copy of the capture), then render
-      // the processed preview from it — never the other way round.
-      final originalPath = p.join(docFolder.path, 'original_$i.jpg');
-      await File(pages[i].imagePath).copy(originalPath);
-      originalPaths.add(originalPath);
-
-      final destPath = p.join(docFolder.path, 'page_$i.jpg');
-      processedPaths.add(
-        await renderPage(
-          originalPath: originalPath,
-          destPath: destPath,
-          filter: pages[i].filter,
-          rotationDegrees: pages[i].rotation,
-          watermark: applyWatermark,
-          watermarkPosition: watermarkPosition,
-          watermarkLogo: watermarkLogo,
-        ),
-      );
+      await File(pages[i].imagePath).copy(originalPaths[i]);
     }
 
+    final rendered = await _mapBounded<int, RenderedPage>(
+      List.generate(pages.length, (i) => i),
+      (i) => renderPage(
+        originalPath: originalPaths[i],
+        destPath: p.join(docFolder.path, 'page_$i.jpg'),
+        filter: pages[i].filter,
+        rotationDegrees: pages[i].rotation,
+        watermark: applyWatermark,
+        watermarkPosition: watermarkPosition,
+        watermarkLogo: watermarkLogo,
+      ),
+    );
+
     final pdfPath = p.join(docFolder.path, 'document.pdf');
-    await buildPdfFromImages(imagePaths: processedPaths, outputPath: pdfPath);
+    await buildPdfFromSources(
+      pages: [
+        for (final r in rendered)
+          PdfPageSource(path: r.path, width: r.width, height: r.height),
+      ],
+      outputPath: pdfPath,
+    );
     final sizeBytes = await File(pdfPath).length();
     final now = DateTime.now();
 
@@ -102,7 +111,7 @@ Future<List<int>> saveScanSessionAsDocument({
           documentId: documentId,
           pageOrder: i,
           originalImagePath: originalPaths[i],
-          localImagePath: processedPaths[i],
+          localImagePath: rendered[i].path,
           filter: Value(pages[i].filter),
           rotation: Value(pages[i].rotation),
           cropCoordinates: Value(pages[i].cropCoordinates),
@@ -120,21 +129,32 @@ Future<List<int>> saveScanSessionAsDocument({
   final documentIds = <int>[];
   final now = DateTime.now();
 
+  final originalPaths = [
+    for (var i = 0; i < pages.length; i++)
+      p.join(docFolder.path, 'original_$i.jpg'),
+  ];
   for (var i = 0; i < pages.length; i++) {
-    final originalPath = p.join(docFolder.path, 'original_$i.jpg');
-    await File(pages[i].imagePath).copy(originalPath);
+    await File(pages[i].imagePath).copy(originalPaths[i]);
+  }
 
-    final destPath = p.join(docFolder.path, 'page_$i.$ext');
-    await renderPage(
-      originalPath: originalPath,
-      destPath: destPath,
+  // Render pages in bounded parallel (see PDF path), then do DB inserts
+  // sequentially to keep document ids/order deterministic.
+  final rendered = await _mapBounded<int, RenderedPage>(
+    List.generate(pages.length, (i) => i),
+    (i) => renderPage(
+      originalPath: originalPaths[i],
+      destPath: p.join(docFolder.path, 'page_$i.$ext'),
       filter: pages[i].filter,
       rotationDegrees: pages[i].rotation,
       watermark: applyWatermark,
       watermarkPosition: watermarkPosition,
       watermarkLogo: watermarkLogo,
       outputFormat: outputFormat,
-    );
+    ),
+  );
+
+  for (var i = 0; i < pages.length; i++) {
+    final destPath = rendered[i].path;
     final sizeBytes = await File(destPath).length();
     final pageTitle = pages.length > 1 ? '$title (${i + 1})' : title;
 
@@ -155,7 +175,7 @@ Future<List<int>> saveScanSessionAsDocument({
       PagesCompanion.insert(
         documentId: documentId,
         pageOrder: 0,
-        originalImagePath: originalPath,
+        originalImagePath: originalPaths[i],
         localImagePath: destPath,
         filter: Value(pages[i].filter),
         rotation: Value(pages[i].rotation),
@@ -168,4 +188,26 @@ Future<List<int>> saveScanSessionAsDocument({
   }
 
   return documentIds;
+}
+
+/// Maximum number of page-render isolates to run at once. Kept small so N
+/// full-resolution decodes don't spike memory on the 2–3 GB Nepal target.
+const kMaxRenderConcurrency = 3;
+
+/// Maps [items] through async [fn] with at most [kMaxRenderConcurrency]
+/// in-flight at a time, preserving input order in the result. Used to turn the
+/// previously one-at-a-time page render into a bounded-parallel one.
+Future<List<R>> _mapBounded<T, R>(
+  List<T> items,
+  Future<R> Function(T item) fn,
+) async {
+  final results = List<R?>.filled(items.length, null);
+  for (var start = 0; start < items.length; start += kMaxRenderConcurrency) {
+    final end = (start + kMaxRenderConcurrency).clamp(0, items.length);
+    await Future.wait([
+      for (var i = start; i < end; i++)
+        fn(items[i]).then((r) => results[i] = r),
+    ]);
+  }
+  return results.cast<R>();
 }

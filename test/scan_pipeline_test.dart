@@ -89,6 +89,33 @@ void main() {
     expect(File(savedPages[0].localImagePath).existsSync(), isTrue);
   });
 
+  test('multi-page save preserves page order under parallel rendering', () async {
+    // Three pages with distinct filters; bounded-parallel render must still
+    // write them back in input order (regression guard for the perf change
+    // that turned the sequential save loop into a parallel one).
+    final filters = ['original', 'grayscale', 'bw'];
+    final pages = <ScanPage>[];
+    for (var i = 0; i < filters.length; i++) {
+      final path = p.join(tempDir.path, 'order_$i.jpg');
+      await File(path)
+          .writeAsBytes(img.encodeJpg(img.Image(width: 120, height: 160)));
+      pages.add(ScanPage(imagePath: path, filter: filters[i]));
+    }
+
+    final ids = await saveScanSessionAsDocument(
+      pages: pages,
+      documentsRepository: documentsRepository,
+      pagesRepository: pagesRepository,
+      title: 'Ordered',
+    );
+    final saved = await pagesRepository.watchForDocument(ids.single).first;
+    expect(saved.map((p) => p.filter).toList(), filters);
+    expect(saved.map((p) => p.pageOrder).toList(), [0, 1, 2]);
+    for (final page in saved) {
+      expect(File(page.localImagePath).existsSync(), isTrue);
+    }
+  });
+
   test('JPEG export creates one image Document per page', () async {
     final page1Path = p.join(tempDir.path, 'capture_0.jpg');
     final page2Path = p.join(tempDir.path, 'capture_1.jpg');

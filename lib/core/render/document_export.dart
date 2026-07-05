@@ -30,17 +30,16 @@ Future<List<String>> renderProcessedPages({
     final source = await File(page.originalImagePath).exists()
         ? page.originalImagePath
         : page.localImagePath;
-    out.add(
-      await renderPage(
-        originalPath: source,
-        destPath: page.localImagePath,
-        filter: page.filter,
-        rotationDegrees: page.rotation,
-        watermark: watermark,
-        watermarkPosition: watermarkPosition,
-        watermarkLogo: logo,
-      ),
+    final rendered = await renderPage(
+      originalPath: source,
+      destPath: page.localImagePath,
+      filter: page.filter,
+      rotationDegrees: page.rotation,
+      watermark: watermark,
+      watermarkPosition: watermarkPosition,
+      watermarkLogo: logo,
     );
+    out.add(rendered.path);
   }
   return out;
 }

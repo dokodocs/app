@@ -20,7 +20,11 @@ import 'image_enhancer.dart';
 ///   'high_contrast'.
 /// `rotationDegrees`: 0 | 90 | 180 | 270 (clockwise).
 /// `outputFormat`: 'jpg' | 'png'.
-Future<String> renderPage({
+///
+/// Returns the written [RenderedPage.path] plus the final pixel [width]/[height]
+/// (after rotation), so downstream consumers (e.g. the PDF builder) don't have
+/// to re-decode the image just to learn its size.
+Future<RenderedPage> renderPage({
   required String originalPath,
   required String destPath,
   String filter = 'original',
@@ -47,6 +51,20 @@ Future<String> renderPage({
   );
 }
 
+/// A rendered page: the written file [path] and its final pixel dimensions.
+/// Carrying the dimensions forward lets the PDF builder size pages without a
+/// second full-image decode.
+class RenderedPage {
+  const RenderedPage({
+    required this.path,
+    required this.width,
+    required this.height,
+  });
+  final String path;
+  final int width;
+  final int height;
+}
+
 class _RenderArgs {
   const _RenderArgs({
     required this.originalPath,
@@ -71,7 +89,7 @@ class _RenderArgs {
   final int jpegQuality;
 }
 
-Future<String> _renderPageIsolate(_RenderArgs args) async {
+Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
   final bytes = await File(args.originalPath).readAsBytes();
   var image = img.decodeImage(bytes);
   if (image == null) {
@@ -128,7 +146,13 @@ Future<String> _renderPageIsolate(_RenderArgs args) async {
       ? img.encodePng(image)
       : img.encodeJpg(image, quality: args.jpegQuality);
   await File(args.destPath).writeAsBytes(encoded);
-  return args.destPath;
+  // Return the FINAL dimensions (post-rotation) so the PDF builder can size
+  // pages without decoding the image a second time.
+  return RenderedPage(
+    path: args.destPath,
+    width: image.width,
+    height: image.height,
+  );
 }
 
 /// The DokoDocs corner watermark: the doko logo mark next to the "dokodocs"

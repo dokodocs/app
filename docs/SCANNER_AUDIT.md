@@ -250,6 +250,51 @@ Chooser → (native scanner OR fallback camera OR gallery) → review tray
 
 ---
 
+## 16. Performance post-mortem — why 3 pages take ~90 s (evidence)
+
+A two-agent code trace confirmed the slowness is **implementation, not ML Kit**:
+
+1. **Sequential, UI-blocking save.** `document_builder.dart` rendered pages in a
+   `for` loop, each `await`ed; the review screen held a spinner until render-all
+   + PDF + DB finished. `compute` spawns an isolate per page, but serial `await`
+   meant only one ran at a time.
+2. **Wasted second full decode per page.** `pdf_builder` decoded each page image
+   in full **only to read width/height**, then discarded it (the PDF embeds the
+   raw JPEG bytes).
+3. **Logo re-decoded per page** in the render isolate.
+4. **Fallback path double-processes:** `_captureWithCustomCamera` awaited a
+   full-res decode + `autoDetectAndCrop` **per page before the camera reopened**;
+   save then decoded full-res again. (Native ML Kit returns all pages at once —
+   fast.)
+5. **OCR is not in the pipeline** (unimplemented) — not a bottleneck.
+
+### Phase 2 changes applied (this pass)
+- **Bounded-parallel render** (`_mapBounded`, cap `kMaxRenderConcurrency = 3`) in
+  `document_builder.dart` for both PDF and image save paths — real parallelism
+  via the existing per-page isolates, order preserved, memory bounded.
+- **`renderPage` returns `RenderedPage{path,width,height}`**; new
+  `buildPdfFromSources` sizes pages from those dims → **eliminates the second
+  decode** on the save path. Path-only `buildPdfFromImages` retained for editor/
+  version/merge callers.
+- **Fallback-path SnackBar** ("Using built-in camera…") so the active scanner
+  path is visible.
+- Tests: 3-page order under parallel render (`scan_pipeline_test`), PDF dims path
+  (`pdf_builder_test`).
+
+**Still deferred to Phase 3:** returning the camera immediately and processing
+in the background (the per-page fallback capture blocking, finding #4) — a
+UX/architecture change, out of scope for this low-risk perf pass.
+
+## 17. Phased roadmap
+
+| Phase | Scope | Complexity | Risk | Expected gain |
+| --- | --- | --- | --- | --- |
+| 1 Audit | this document | — | — | evidence-grounded decisions |
+| 2 Optimize (done) | parallel save, kill duplicate decode, path diagnostic | Low–Med | Low | save time cut substantially, no ML Kit change |
+| 3 Modularize | camera returns immediately; background processing; per-page progress | Med | Med | perceived-instant capture |
+| 4 Replace only fallback detection | OpenCV / on-device ML for the fallback path | High | Med–High | CamScanner-grade edges without Play Services |
+| 5 Professional | multi-frame HDR, advanced shadow removal, OCR phase | High | High | full feature parity |
+
 ## Final recommendation
 
 The current stack is sound and should be **maximised, not rewritten**. The

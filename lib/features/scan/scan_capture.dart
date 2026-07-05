@@ -127,6 +127,11 @@ Future<void> _runCapture(
       return;
     }
     if (!context.mounted) return;
+    // Tell the user which scanner they're actually using: the native ML Kit /
+    // VisionKit scanner failed to open, so we're on the built-in fallback
+    // camera. Makes the active path visible (Settings → Device status has the
+    // scanner self-test for confirmation).
+    _showUsingFallbackCamera(context);
     final fallback = await _captureWithCustomCamera(context, noOfPages);
     if (fallback.isEmpty) return; // user cancelled the fallback camera
     paths = fallback;
@@ -251,6 +256,13 @@ void _showSkippedImages(BuildContext context, int count) {
   final l10n = AppLocalizations.of(context);
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(l10n.scanSkippedImages(count))),
+  );
+}
+
+void _showUsingFallbackCamera(BuildContext context) {
+  final l10n = AppLocalizations.of(context);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(l10n.scanUsingFallbackCamera)),
   );
 }
 
