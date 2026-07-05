@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dokodocs/features/scan/crop_processor.dart';
+import 'package:dokodocs/features/scan/image_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -55,5 +56,25 @@ void main() {
     expect(back.tr, q.tr);
     expect(back.br, q.br);
     expect(back.bl, q.bl);
+  });
+
+  test('normalizeImageForPipeline passes a decodable JPEG through unchanged',
+      () async {
+    final im = img.Image(width: 20, height: 20);
+    img.fill(im, color: img.ColorRgb8(120, 120, 120));
+    final path = p.join(tempDir.path, 'ok.jpg');
+    File(path).writeAsBytesSync(img.encodeJpg(im));
+
+    final result = await normalizeImageForPipeline(path);
+    expect(result, path); // fast path: already decodable
+  });
+
+  test('normalizeImageForPipeline returns null for an undecodable file',
+      () async {
+    final path = p.join(tempDir.path, 'bad.jpg'); // arbitrary name, not real image bytes
+    File(path).writeAsBytesSync([0, 1, 2, 3, 4, 5, 6, 7]);
+
+    final result = await normalizeImageForPipeline(path);
+    expect(result, isNull); // skipped, not a crash
   });
 }

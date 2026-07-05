@@ -8,6 +8,7 @@ import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import 'camera_scanner_screen.dart';
 import 'crop_editor_screen.dart';
+import 'image_normalizer.dart';
 import 'providers/scan_session_provider.dart';
 import 'scan_review_screen.dart';
 
@@ -86,7 +87,24 @@ Future<void> _runCapture(
       // document scanner's gallery mode, this lets the user pick MANY
       // images at once to turn into a multi-page document.
       final picked = await ImagePicker().pickMultiImage();
-      paths = [for (final file in picked) file.path];
+      // Normalize each pick so formats the render pipeline can't decode
+      // (HEIC/HEIF, some progressive/CMYK JPEGs) are converted up front
+      // instead of failing later with "Could not decode image". Undecodable
+      // files are dropped and reported rather than aborting the whole import.
+      final normalized = <String>[];
+      var skipped = 0;
+      for (final file in picked) {
+        final safe = await normalizeImageForPipeline(file.path);
+        if (safe == null) {
+          skipped++;
+        } else {
+          normalized.add(safe);
+        }
+      }
+      if (skipped > 0 && context.mounted) {
+        _showSkippedImages(context, skipped);
+      }
+      paths = normalized;
     } else {
       paths = await CunningDocumentScanner.getPictures(
         scannerSource: source,
@@ -201,6 +219,13 @@ Future<List<String>> _captureWithCustomCamera(
     if (!batch || !context.mounted) break;
   }
   return paths;
+}
+
+void _showSkippedImages(BuildContext context, int count) {
+  final l10n = AppLocalizations.of(context);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(l10n.scanSkippedImages(count))),
+  );
 }
 
 void _showScannerError(BuildContext context, {required bool isGallery}) {
