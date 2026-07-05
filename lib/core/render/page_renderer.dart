@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import 'image_enhancer.dart';
+import 'image_enhancer_cv.dart';
 
 /// Centralized, render-time page pipeline for the NON-DESTRUCTIVE model:
 /// always reads the immutable [originalPath], applies (in order) filter →
@@ -108,27 +109,27 @@ Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
       image = img.adjustColor(image, brightness: 1.08, contrast: 1.15);
     case 'high_contrast':
       image = img.contrast(image, contrast: 160);
-    // Professional scan modes — modular enhancement layer (shadow/illumination
-    // removal → whitening → adaptive contrast → text sharpen). See
-    // image_enhancer.dart. Added on top of the existing filters, not replacing.
+    // Professional scan modes — OpenCV enhancement (CLAHE + unsharp +
+    // adaptive threshold; see image_enhancer_cv.dart) with a pure-Dart
+    // fallback (image_enhancer.dart) if OpenCV fails.
     case 'auto':
-      image = enhanceDocument(image, ScanMode.auto);
+      image = _enhance(image, bytes, ScanMode.auto);
     case 'magic':
-      image = enhanceDocument(image, ScanMode.magic);
+      image = _enhance(image, bytes, ScanMode.magic);
     case 'bw_text':
-      image = enhanceDocument(image, ScanMode.bwText);
+      image = _enhance(image, bytes, ScanMode.bwText);
     case 'color':
-      image = enhanceDocument(image, ScanMode.color);
+      image = _enhance(image, bytes, ScanMode.color);
     case 'professional':
-      image = enhanceDocument(image, ScanMode.professional);
+      image = _enhance(image, bytes, ScanMode.professional);
     case 'hd':
-      image = enhanceDocument(image, ScanMode.hd);
+      image = _enhance(image, bytes, ScanMode.hd);
     case 'extreme_clarity':
-      image = enhanceDocument(image, ScanMode.extremeClarity);
+      image = _enhance(image, bytes, ScanMode.extremeClarity);
     case 'receipt':
-      image = enhanceDocument(image, ScanMode.receipt);
+      image = _enhance(image, bytes, ScanMode.receipt);
     case 'book':
-      image = enhanceDocument(image, ScanMode.book);
+      image = _enhance(image, bytes, ScanMode.book);
     case 'original':
     default:
       break;
@@ -153,6 +154,19 @@ Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
     width: image.width,
     height: image.height,
   );
+}
+
+/// Applies a professional scan [mode] using the OpenCV engine (CLAHE +
+/// unsharp + adaptive threshold), falling back to the pure-Dart enhancer if
+/// OpenCV fails. [srcBytes] are the original encoded bytes; [decoded] is the
+/// already-decoded image used for the fallback path.
+img.Image _enhance(img.Image decoded, Uint8List srcBytes, ScanMode mode) {
+  final cvBytes = enhanceBytesCv(srcBytes, mode);
+  if (cvBytes != null) {
+    final cvImage = img.decodeImage(cvBytes);
+    if (cvImage != null) return cvImage;
+  }
+  return enhanceDocument(decoded, mode);
 }
 
 /// The DokoDocs corner watermark: the doko logo mark next to the "dokodocs"

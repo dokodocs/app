@@ -24,9 +24,9 @@ class CvDetection {
 CvDetection? detectDocumentCvBytes(
   Uint8List bytes, {
   int workLongEdge = 700,
-  double minAreaFraction = 0.12,
+  double minAreaFraction = 0.10,
 }) {
-  cv.Mat? full, small, gray, blur, edges;
+  cv.Mat? full, small, gray, blur, edges, kernel, closed;
   try {
     full = cv.imdecode(bytes, cv.IMREAD_COLOR);
     if (full.isEmpty) return null;
@@ -38,10 +38,15 @@ CvDetection? detectDocumentCvBytes(
     small = scale < 1.0 ? cv.resize(full, (sw, sh)) : full.clone();
     gray = cv.cvtColor(small, cv.COLOR_BGR2GRAY);
     blur = cv.gaussianBlur(gray, (5, 5), 0);
-    edges = cv.canny(blur, 75, 200);
+    edges = cv.canny(blur, 50, 150);
+    // Morphological CLOSE dilates then erodes → bridges small gaps in the
+    // Canny edges so a page outline forms ONE closed contour instead of
+    // broken segments (the main reason detection was flaky / stuck yellow).
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9));
+    closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel);
 
     final (contours, _) = cv.findContours(
-      edges,
+      closed,
       cv.RETR_LIST,
       cv.CHAIN_APPROX_SIMPLE,
     );
@@ -53,10 +58,15 @@ CvDetection? detectDocumentCvBytes(
       final area = cv.contourArea(c);
       if (area < minAreaFraction * frameArea) continue;
       final peri = cv.arcLength(c, true);
-      final approx = cv.approxPolyDP(c, 0.02 * peri, true);
-      if (approx.length == 4 && area > bestArea) {
-        bestArea = area;
-        bestQuad = [for (final p in approx) p];
+      // Try a few epsilon tolerances so a slightly-noisy outline still
+      // approximates to a 4-point quad.
+      for (final eps in const [0.02, 0.03, 0.05]) {
+        final approx = cv.approxPolyDP(c, eps * peri, true);
+        if (approx.length == 4 && area > bestArea) {
+          bestArea = area;
+          bestQuad = [for (final p in approx) p];
+          break;
+        }
       }
     }
     if (bestQuad == null) return null;
@@ -83,10 +93,27 @@ CvDetection? detectDocumentCvBytes(
     final tr = up(byKey((p) => (p.y - p.x).toDouble(), false));
     final bl = up(byKey((p) => (p.y - p.x).toDouble(), true));
 
-    // Confidence: area fraction, damped so a near-full-frame quad (weak edges)
-    // doesn't read as perfect.
+    // Confidence from DETECTION QUALITY, not just area — a well-formed
+    // rectangle should read as high (green) even when the page fills only ~50%
+    // of the frame (the reason the border was previously stuck on yellow).
+    double d(({double x, double y}) a, ({double x, double y}) b) =>
+        math.sqrt(math.pow(a.x - b.x, 2) + math.pow(a.y - b.y, 2));
+    final topW = d(tl, tr), botW = d(bl, br);
+    final leftH = d(tl, bl), rightH = d(tr, br);
+    // Opposite sides should be similar (rectangular, low perspective skew).
+    final wRatio = topW == 0 || botW == 0
+        ? 0.0
+        : math.min(topW, botW) / math.max(topW, botW);
+    final hRatio = leftH == 0 || rightH == 0
+        ? 0.0
+        : math.min(leftH, rightH) / math.max(leftH, rightH);
+    final rectScore = (wRatio + hRatio) / 2; // 0..1
     final frac = (bestArea / frameArea).clamp(0.0, 1.0);
-    final confidence = frac > 0.97 ? 0.6 : frac.clamp(0.0, 0.95);
+    // Reward a filled, rectangular quad; only penalise a near-full-frame quad
+    // (usually weak/false edges).
+    final areaScore = frac > 0.95 ? 0.5 : (frac / 0.6).clamp(0.0, 1.0);
+    var confidence = 0.35 + 0.5 * rectScore + 0.15 * areaScore;
+    confidence = confidence.clamp(0.0, 0.99);
 
     return CvDetection(Quad(tl, tr, br, bl), confidence);
   } catch (_) {
@@ -98,6 +125,8 @@ CvDetection? detectDocumentCvBytes(
     gray?.dispose();
     blur?.dispose();
     edges?.dispose();
+    kernel?.dispose();
+    closed?.dispose();
   }
 }
 

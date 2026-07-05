@@ -608,7 +608,7 @@
   "@statusCamera": {"description": "Device status row: camera"},
   "statusDocumentScanner": "Document scanner",
   "@statusDocumentScanner": {"description": "Device status row: ML Kit document scanner"},
-  "statusDocumentScannerBody": "Uses Google Play services. If unavailable, the basic camera is used instead.",
+  "statusDocumentScannerBody": "Built-in OpenCV scanner — works on every device, no Google Play services needed.",
   "@statusDocumentScannerBody": {"description": "Explanation for the document scanner status row"},
   "statusLocalStorage": "Local storage",
   "@statusLocalStorage": {"description": "Device status row: local storage"},

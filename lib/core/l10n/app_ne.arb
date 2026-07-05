@@ -229,7 +229,7 @@
   "settingsSystemStatus": "यन्त्र स्थिति",
   "statusCamera": "क्यामेरा",
   "statusDocumentScanner": "कागजात स्क्यानर",
-  "statusDocumentScannerBody": "Google Play services प्रयोग गर्छ। उपलब्ध नभए साधारण क्यामेरा प्रयोग हुन्छ।",
+  "statusDocumentScannerBody": "बिल्ट-इन OpenCV स्क्यानर — हरेक डिभाइसमा काम गर्छ, Google Play services चाहिँदैन।",
   "statusLocalStorage": "स्थानीय भण्डारण",
   "statusAvailable": "उपलब्ध",
   "statusPermissionNeeded": "अनुमति आवश्यक",

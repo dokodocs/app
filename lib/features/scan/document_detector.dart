@@ -24,7 +24,7 @@ List<double>? detectQuadInFile(String path) {
 /// Confidence thresholds shared by the capture flow (mirrors the spec):
 /// ≥ high → auto-crop and skip the editor; ≥ medium → auto-crop but open the
 /// editor for optional tweaks; below → open the editor for manual correction.
-const kHighConfidence = 0.86;
+const kHighConfidence = 0.80;
 const kMediumConfidence = 0.70;
 
 /// Isolate-safe full-resolution re-detection + confidence-gated auto-crop.
