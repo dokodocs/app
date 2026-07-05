@@ -285,6 +285,27 @@ A two-agent code trace confirmed the slowness is **implementation, not ML Kit**:
 in the background (the per-page fallback capture blocking, finding #4) — a
 UX/architecture change, out of scope for this low-risk perf pass.
 
+## 16b. Root cause: native scanner never opened (always fell back)
+
+On the user's device the fallback SnackBar always appeared → ML Kit never
+launched. Cause: **`AndroidManifest.xml` was missing**
+
+```xml
+<meta-data android:name="com.google.mlkit.vision.DEPENDENCIES"
+           android:value="docscanner" />
+```
+
+Without it, the ML Kit Document Scanner module isn't downloaded at install
+time; it attempts an on-demand fetch on first use, which fails on emulators
+and devices with slow/absent Google Play services → `getPictures` throws →
+permanent fallback to the built-in camera (no native edge detection / crop).
+Added the meta-data so Play installs the module up front.
+
+**Caveat:** this only helps where Google **Play services / Play Store are
+present**. On an emulator without the Play Store image, or a de-Googled device,
+ML Kit still can't run — there the pure-Dart fallback is the only option and a
+real CV engine (Phase 4) would be required for CamScanner-grade edges.
+
 ## 17. Phased roadmap
 
 | Phase | Scope | Complexity | Risk | Expected gain |
