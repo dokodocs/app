@@ -4,11 +4,17 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 import 'crop_processor.dart';
+import 'document_detector_cv.dart';
 
 /// Isolate-safe entry point (for `compute`): decode the image at [path],
 /// detect the document quad, and return its 8 corner doubles (TL,TR,BR,BL in
 /// full-res pixels), or null if nothing confident was found.
 List<double>? detectQuadInFile(String path) {
+  // Prefer the OpenCV detector (V2) — far more accurate and works with no
+  // Google Play services. Fall back to the pure-Dart detector if OpenCV
+  // finds nothing or is unavailable.
+  final cvHit = detectDocumentCvFile(path);
+  if (cvHit != null) return cvHit.quad.toList();
   final bytes = File(path).readAsBytesSync();
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -37,14 +43,15 @@ Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
   if (image == null) {
     return {'path': srcPath, 'confidence': 0.0, 'cropped': false};
   }
-  final det = detectDocument(image);
-  if (det == null || det.confidence < kMediumConfidence) {
-    return {
-      'path': srcPath,
-      'confidence': det?.confidence ?? 0.0,
-      'cropped': false,
-    };
+  // Prefer OpenCV detection (V2); fall back to the pure-Dart detector.
+  final cvHit = detectDocumentCvBytes(bytes);
+  final quad = cvHit?.quad ?? detectDocument(image)?.quad;
+  final confidence =
+      cvHit?.confidence ?? detectDocument(image)?.confidence ?? 0.0;
+  if (quad == null || confidence < kMediumConfidence) {
+    return {'path': srcPath, 'confidence': confidence, 'cropped': false};
   }
+  final det = (quad: quad, confidence: confidence);
   // Expand the quad outward by ~2.5% of the frame per side (clamped) so text /
   // stamps near the edge are never clipped.
   final mx = image.width * 0.025;

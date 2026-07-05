@@ -161,6 +161,23 @@ the default until V2 is verified on-device.
 
 ---
 
+## Progress
+
+- **Root cause proven (2026-07-05):** the native failure is a
+  `NullPointerException` **inside Google's ML Kit Document Scanner 16.0.0**
+  (obfuscated GMS/CameraX frames, async on the main Handler) on a Samsung
+  S24+. `16.0.0` is the latest published version — no upgrade fix — and the
+  plugin's Dart API doesn't expose the scanner-mode toggle. **Unfixable from
+  the app side.** This is why V2 (own the pipeline) is necessary.
+- **V2.0 done:** added `dartcv4` (OpenCV FFI); release build succeeds,
+  arm64 APK ≈ 46 MB (per-ABI). OpenCV is viable on this project.
+- **V2.1 done:** `document_detector_cv.dart` — Canny + contour + quad
+  detection with corner ordering + confidence, wired as the PRIMARY detector
+  for the crop-editor auto-seed and the post-capture auto-crop (Dart detector
+  kept as graceful fallback). Works with no Google Play services.
+- **Next:** V2.2 (OpenCV live overlay on camera frames), V2.3 (OpenCV
+  `warpPerspective` crop), V2.5 (continuous multi-shot).
+
 ## Immediate next step (if approved)
 
 Start **V2.0**: add `opencv_dart`, get a trivial OpenCV call (e.g. `cvtColor`)

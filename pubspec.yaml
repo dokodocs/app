@@ -88,7 +88,7 @@ dependencies:
   # only picks one image at a time; pickMultiImage() lets the user select
   # many photos at once to build a multi-page document.
   image_picker: ^1.2.3
-
+  dartcv4: ^1.1.8
 dev_dependencies:
   flutter_test:
     sdk: flutter
