@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -87,6 +89,18 @@ Future<void> _runCapture(
   }
 
   List<String>? paths;
+
+  // If the native scanner is already known to be broken on this device (it
+  // throws an internal NullPointerException inside ML Kit Document Scanner
+  // 16.0.0 on some devices), skip it entirely and go straight to the OpenCV
+  // custom camera — no repeated error dialog, no wasted launch attempt.
+  final skipNative = !isGallery && await _nativeScannerBroken();
+  if (skipNative) {
+    if (!context.mounted) return;
+    final fallback = await _captureWithCustomCamera(context, noOfPages);
+    if (fallback.isEmpty) return;
+    paths = fallback;
+  } else {
   try {
     if (isGallery) {
       // image_picker's multi-select photo picker — unlike the native
@@ -134,10 +148,15 @@ Future<void> _runCapture(
     if (!context.mounted) return;
     // Surface the actual error to the user (truncated) so the fallback is no
     // longer a silent dead-end — this is the diagnostic signal.
+    // Remember the native scanner is broken here so future scans skip it and
+    // go straight to the working OpenCV camera (no repeated error).
+    await _markNativeScannerBroken();
+    if (!context.mounted) return;
     _showUsingFallbackCamera(context, error);
     final fallback = await _captureWithCustomCamera(context, noOfPages);
     if (fallback.isEmpty) return; // user cancelled the fallback camera
     paths = fallback;
+  }
   }
 
   if (paths == null || paths.isEmpty) return; // user cancelled
@@ -266,6 +285,38 @@ Future<String> _autoCropOrEdit(BuildContext context, String shot) async {
     MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: seed)),
   );
   return cropped ?? seed;
+}
+
+/// Marker file recording that the native ML Kit scanner is broken on this
+/// device (its internal NPE), so we stop attempting it and go straight to the
+/// OpenCV custom camera. Cleared when the Device-status scanner self-test
+/// succeeds. A plain file avoids a DB migration for this one flag.
+Future<File> _nativeMarkerFile() async {
+  final dir = await getApplicationSupportDirectory();
+  return File(p.join(dir.path, 'native_scanner_broken.flag'));
+}
+
+Future<bool> _nativeScannerBroken() async {
+  try {
+    return (await _nativeMarkerFile()).existsSync();
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<void> _markNativeScannerBroken() async {
+  try {
+    await (await _nativeMarkerFile()).create(recursive: true);
+  } catch (_) {/* best effort */}
+}
+
+/// Clears the broken-marker so the native scanner is retried (e.g. after a
+/// successful Device-status self-test, or a Play services update).
+Future<void> clearNativeScannerBrokenFlag() async {
+  try {
+    final f = await _nativeMarkerFile();
+    if (f.existsSync()) await f.delete();
+  } catch (_) {/* best effort */}
 }
 
 void _showSkippedImages(BuildContext context, int count) {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/l10n/app_localizations.dart';
+import '../scan/scan_capture.dart';
 import '../scan/scanner_diagnostics.dart';
 
 /// A "Device status" checklist in Settings: shows, at a glance, whether the
@@ -58,6 +59,9 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
       );
       ok = true;
       ScannerDiagnostics.recordNativeSuccess();
+      // Native scanner works again → allow scans to use it (clear the marker
+      // that was making capture skip straight to the OpenCV fallback).
+      await clearNativeScannerBrokenFlag();
     } catch (error) {
       ok = false;
       // Record the real reason so it's visible below, not swallowed.
