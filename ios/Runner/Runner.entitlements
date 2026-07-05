@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required by sign_in_with_apple: the "Sign in with Apple" capability.
+	     Without this entitlement the native ASAuthorization flow throws
+	     immediately (error 1000) and the App Store rejects any build that
+	     offers third-party sign-in. Enable the matching capability on the
+	     App ID in the Apple Developer portal for the automatic provisioning
+	     profile to include it. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>

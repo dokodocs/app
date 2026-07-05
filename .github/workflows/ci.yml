@@ -30,3 +30,36 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+  build-ios:
+    # iOS can only be built on macOS (Xcode/iOS SDK are macOS-only), so this
+    # runs on a hosted Mac runner. Produces an unsigned .app — enough to prove
+    # the iOS build compiles end to end without an Apple signing certificate.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (drift, l10n)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned .app
+        run: |
+          cd build/ios/iphoneos
+          zip -r Runner-unsigned.zip Runner.app
+
+      - name: Upload iOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-unsigned
+          path: build/ios/iphoneos/Runner-unsigned.zip
+          if-no-files-found: error
