@@ -88,12 +88,37 @@ ColorFilter? previewColorFilter(String filter) {
         0, 0, 0, 1, 0, //
       ]);
     case 'bw_text':
+    case 'receipt':
+      // Greyscale + strong contrast (real de-shadow applies on save).
       const f = 2.8;
       const t = 128 - 128 * f + 20;
       return const ColorFilter.matrix(<double>[
         lr * f, lg * f, lb * f, 0, t, //
         lr * f, lg * f, lb * f, 0, t, //
         lr * f, lg * f, lb * f, 0, t, //
+        0, 0, 0, 1, 0, //
+      ]);
+    case 'color':
+    case 'book':
+      // Gentle colour clean-up.
+      const f = 1.08;
+      const t = 128 - 128 * f + 8;
+      return const ColorFilter.matrix(<double>[
+        f, 0, 0, 0, t, //
+        0, f, 0, 0, t, //
+        0, 0, f, 0, t, //
+        0, 0, 0, 1, 0, //
+      ]);
+    case 'professional':
+    case 'hd':
+    case 'extreme_clarity':
+      // Whitened + contrasty colour (sharpening not previewable via a matrix).
+      const f = 1.24;
+      const t = 128 - 128 * f + 16;
+      return const ColorFilter.matrix(<double>[
+        f, 0, 0, 0, t, //
+        0, f, 0, 0, t, //
+        0, 0, f, 0, t, //
         0, 0, 0, 1, 0, //
       ]);
     case 'original':

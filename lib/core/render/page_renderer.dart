@@ -99,6 +99,18 @@ Future<String> _renderPageIsolate(_RenderArgs args) async {
       image = enhanceDocument(image, ScanMode.magic);
     case 'bw_text':
       image = enhanceDocument(image, ScanMode.bwText);
+    case 'color':
+      image = enhanceDocument(image, ScanMode.color);
+    case 'professional':
+      image = enhanceDocument(image, ScanMode.professional);
+    case 'hd':
+      image = enhanceDocument(image, ScanMode.hd);
+    case 'extreme_clarity':
+      image = enhanceDocument(image, ScanMode.extremeClarity);
+    case 'receipt':
+      image = enhanceDocument(image, ScanMode.receipt);
+    case 'book':
+      image = enhanceDocument(image, ScanMode.book);
     case 'original':
     default:
       break;

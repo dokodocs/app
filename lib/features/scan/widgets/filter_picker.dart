@@ -21,6 +21,12 @@ class FilterPicker extends StatelessWidget {
       // Professional scan modes first (shadow-removed, whitened, sharpened).
       'auto': l10n.scanFilterAuto,
       'magic': l10n.scanFilterMagic,
+      'color': l10n.scanFilterColor,
+      'professional': l10n.scanFilterProfessional,
+      'hd': l10n.scanFilterHd,
+      'extreme_clarity': l10n.scanFilterExtremeClarity,
+      'receipt': l10n.scanFilterReceipt,
+      'book': l10n.scanFilterBook,
       'bw_text': l10n.scanFilterBwText,
       'original': l10n.scanFilterOriginal,
       'grayscale': l10n.scanFilterGrayscale,

@@ -82,6 +82,28 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 - [`prompt/launch_app.md`](prompt/launch_app.md) — the authoritative Google Play / Apple App Store launch checklist (Phase 1 exit gate)
 - `docs/PHASE_N_SUMMARY.md` — one per completed phase (what shipped, what was tested, manual setup required)
 
+## Credits & acknowledgements
+
+The scanning experience is built on, and inspired by, excellent open-source work:
+
+- **[jachzen/cunning_document_scanner](https://github.com/jachzen/cunning_document_scanner)** — the Flutter plugin DokoDocs uses for capture and document detection, wrapping **Google ML Kit Document Scanner** (Android, `SCANNER_MODE_FULL`) and **Apple VisionKit** (iOS). This is our **primary** scan path and is used unchanged. Thank you 🙏
+- **[ishaquehassan/document_scanner_flutter](https://github.com/ishaquehassan/document_scanner_flutter)** — inspiration for the **post-capture** side: the multi-mode filter set (Auto / Magic Color / Color / Professional / HD / Extreme Clarity / Receipt / Book / B&W Text), the enhancement-driven "scan modes" concept, and page-management/editing UX. We adopted the *ideas*, re-implemented for our pipeline rather than copying code. Thank you 🙏
+
+### What we adopted, and how it stays compatible
+
+We deliberately **do not** replace the scanner SDK, ML Kit/VisionKit, OpenCV-free detection, or OCR. Every improvement is layered *around* the native scanner:
+
+| Adopted idea | Where it lives | Why it's compatible |
+| --- | --- | --- |
+| Post-capture enhancement pipeline (de-shadow → whiten → adaptive contrast → sharpen) | `lib/core/render/image_enhancer.dart` | Pure `image`-package ops in the existing render isolate; applied to the processed copy, never the original |
+| Multi-mode scan filters | `image_enhancer.dart` + `filter_picker.dart` | Each mode only changes enhancement *parameters* — no scanner change |
+| Confidence-gated auto-crop (skip editor when confident) | `document_detector.dart`, `scan_capture.dart` | Runs on the captured still *after* the native flow; editor is the fallback |
+| Live border: strict detection, confidence colour, temporal smoothing, auto-capture | `document_detector.dart`, `camera_scanner_screen.dart` | Only used on the **custom fallback camera** (when ML Kit is unavailable); native path keeps its own UI |
+
+### ML Kit / VisionKit limitations (and our closest feasible alternative)
+
+Google's and Apple's on-device detectors are closed-source — we cannot tune their internal edge detector, green border, or crop algorithm. So on the **native** path we accept their (excellent) behaviour as-is. The custom **fallback** camera + our lightweight pure-Dart detector exists only for devices without Google Play services; it is intentionally conservative (shows no border rather than a wrong one) and hands off to the manual crop editor when confidence is low.
+
 ## License
 
 [Apache License 2.0](LICENSE).

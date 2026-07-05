@@ -40,12 +40,15 @@ void main() {
         lessThan((leftBefore - rightBefore).abs()));
   });
 
-  test('enhanceDocument runs each scan mode and preserves dimensions', () {
+  test('enhanceDocument runs every scan mode and preserves dimensions', () {
     final src = shadowedPage();
+    // Covers all modes incl. the document_scanner_flutter-inspired set
+    // (color/professional/hd/extremeClarity/receipt/book).
+    expect(ScanMode.values.length, greaterThanOrEqualTo(9));
     for (final mode in ScanMode.values) {
       final out = enhanceDocument(src, mode);
-      expect(out.width, src.width);
-      expect(out.height, src.height);
+      expect(out.width, src.width, reason: 'mode $mode');
+      expect(out.height, src.height, reason: 'mode $mode');
     }
   });
 }

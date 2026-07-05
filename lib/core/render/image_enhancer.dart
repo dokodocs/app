@@ -18,6 +18,9 @@ import 'package:image/image.dart' as img;
 /// that estimate. Shadows, fold-gradients and uneven lighting are flattened
 /// and the paper is normalised toward white, while text (much darker than its
 /// local background) is preserved.
+/// Scan modes inspired by document_scanner_flutter's filter set, implemented
+/// purely as parameters on the shared pipeline below (they change enhancement
+/// intensity only — they do NOT touch the scanner/detection technology).
 enum ScanMode {
   /// Balanced colour enhancement: de-shadow, whiten, gentle contrast + sharpen.
   auto,
@@ -27,6 +30,24 @@ enum ScanMode {
 
   /// OCR-optimised bilevel-ish black text on white.
   bwText,
+
+  /// Natural colours, light clean-up (closest to the original photo).
+  color,
+
+  /// Professional: strong whitening + crisp text, colours kept.
+  professional,
+
+  /// HD: professional + extra sharpening for fine print.
+  hd,
+
+  /// Extreme clarity: maximum text sharpening (use with care).
+  extremeClarity,
+
+  /// Receipt: high-contrast greyscale tuned for thermal-paper receipts.
+  receipt,
+
+  /// Book: gentle, keeps page tone and photos, mild fold-shadow removal.
+  book,
 }
 
 img.Image enhanceDocument(img.Image src, ScanMode mode) {
@@ -47,6 +68,38 @@ img.Image enhanceDocument(img.Image src, ScanMode mode) {
       out = img.grayscale(out);
       out = adaptiveContrast(out, contrast: 1.6, brightness: 1.02);
       out = sharpenText(out, amount: 0.5);
+      return out;
+    case ScanMode.color:
+      var out = removeIllumination(src, strength: 0.5);
+      out = adaptiveContrast(out, contrast: 1.06, brightness: 1.01);
+      out = sharpenText(out, amount: 0.35);
+      return out;
+    case ScanMode.professional:
+      var out = removeIllumination(src, strength: 0.95);
+      out = adaptiveContrast(out, contrast: 1.18, brightness: 1.03);
+      out = img.adjustColor(out, saturation: 1.06);
+      out = sharpenText(out, amount: 0.75);
+      return out;
+    case ScanMode.hd:
+      var out = removeIllumination(src, strength: 0.95);
+      out = adaptiveContrast(out, contrast: 1.22, brightness: 1.03);
+      out = sharpenText(out, amount: 1.0);
+      return out;
+    case ScanMode.extremeClarity:
+      var out = removeIllumination(src, strength: 1.0);
+      out = adaptiveContrast(out, contrast: 1.3, brightness: 1.02);
+      out = sharpenText(out, amount: 1.4);
+      return out;
+    case ScanMode.receipt:
+      var out = removeIllumination(src, strength: 1.0);
+      out = img.grayscale(out);
+      out = adaptiveContrast(out, contrast: 1.75, brightness: 1.05);
+      out = sharpenText(out, amount: 0.7);
+      return out;
+    case ScanMode.book:
+      var out = removeIllumination(src, strength: 0.6);
+      out = adaptiveContrast(out, contrast: 1.08, brightness: 1.02);
+      out = sharpenText(out, amount: 0.4);
       return out;
   }
 }

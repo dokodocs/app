@@ -202,6 +202,18 @@
   "@scanFilterBwText": {
     "description": "Scan mode: OCR-optimised black text on clean white"
   },
+  "scanFilterColor": "Color",
+  "@scanFilterColor": {"description": "Scan mode: natural colours, light clean-up"},
+  "scanFilterProfessional": "Professional",
+  "@scanFilterProfessional": {"description": "Scan mode: strong whitening + crisp text, colours kept"},
+  "scanFilterHd": "HD",
+  "@scanFilterHd": {"description": "Scan mode: professional + extra sharpening"},
+  "scanFilterExtremeClarity": "Extreme Clarity",
+  "@scanFilterExtremeClarity": {"description": "Scan mode: maximum text sharpening"},
+  "scanFilterReceipt": "Receipt",
+  "@scanFilterReceipt": {"description": "Scan mode: high-contrast greyscale for receipts"},
+  "scanFilterBook": "Book",
+  "@scanFilterBook": {"description": "Scan mode: gentle, keeps tone/photos, mild fold-shadow removal"},
   "scanNoPagesYet": "No pages captured",
   "@scanNoPagesYet": {
     "description": "Shown if the scan session is somehow empty"
