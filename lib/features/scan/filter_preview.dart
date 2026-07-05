@@ -66,6 +66,36 @@ ColorFilter? previewColorFilter(String filter) {
         0, 0, 0.92, 0, -18, //
         0, 0, 0, 1, 0, //
       ]);
+    // Professional scan modes. The real shadow-removal/whitening is a spatial
+    // operation that can't be a colour matrix, so these are cheap live
+    // approximations (brighten + contrast) — the full effect applies on save.
+    case 'auto':
+      const f = 1.18;
+      const t = 128 - 128 * f + 14;
+      return const ColorFilter.matrix(<double>[
+        f, 0, 0, 0, t, //
+        0, f, 0, 0, t, //
+        0, 0, f, 0, t, //
+        0, 0, 0, 1, 0, //
+      ]);
+    case 'magic':
+      const f = 1.3;
+      const t = 128 - 128 * f + 18;
+      return const ColorFilter.matrix(<double>[
+        f, 0, 0, 0, t, //
+        0, f, 0, 0, t, //
+        0, 0, f, 0, t, //
+        0, 0, 0, 1, 0, //
+      ]);
+    case 'bw_text':
+      const f = 2.8;
+      const t = 128 - 128 * f + 20;
+      return const ColorFilter.matrix(<double>[
+        lr * f, lg * f, lb * f, 0, t, //
+        lr * f, lg * f, lb * f, 0, t, //
+        lr * f, lg * f, lb * f, 0, t, //
+        0, 0, 0, 1, 0, //
+      ]);
     case 'original':
     default:
       return null;

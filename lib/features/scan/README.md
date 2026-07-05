@@ -43,6 +43,22 @@ corner/margin/stamp. Pure Flutter → identical on Android and iOS.
 ## Key decision — resolved
 Scanner package: **`cunning_document_scanner`** — verified publisher, actively maintained, native OS-level scanner. See `docs/DEPENDENCIES.md`.
 
+## Professional scan modes (enhancement layer)
+Added on top of the existing filters (not replacing them) via
+`core/render/image_enhancer.dart` — a modular pipeline that produces the
+shadow-free, clean-white, crisp-text CamScanner/Adobe-Scan look:
+
+`removeIllumination` (divide by a blurred illumination estimate → flattens
+shadows/gradients, whitens paper) → `adaptiveContrast` → `sharpenText`
+(unsharp mask). Three modes wired into the filter chips and the render isolate
+(`page_renderer` filter switch): **Auto** (balanced colour), **Magic Color**
+(strong whitening + vivid colour, text/stamps kept), **B&W Text** (OCR-
+optimised). Each stage is an independent, tunable function. Runs inside the
+existing render isolate — no new plugins, no UI jank. Full-resolution crop
+re-detection already happens in the crop editor (`document_detector` via
+`compute` on the captured still, not the preview frame). Tested in
+`test/image_enhancer_test.dart`.
+
 ## Key packages
 - `cunning_document_scanner` — capture/edge-detect/crop
 - `image` — filters (grayscale/B&W/brightness-contrast), applied off the main isolate via `compute()`

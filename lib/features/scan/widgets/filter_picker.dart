@@ -18,6 +18,10 @@ class FilterPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final options = <String, String>{
+      // Professional scan modes first (shadow-removed, whitened, sharpened).
+      'auto': l10n.scanFilterAuto,
+      'magic': l10n.scanFilterMagic,
+      'bw_text': l10n.scanFilterBwText,
       'original': l10n.scanFilterOriginal,
       'grayscale': l10n.scanFilterGrayscale,
       'bw': l10n.scanFilterBw,

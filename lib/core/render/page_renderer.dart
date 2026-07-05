@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
+import 'image_enhancer.dart';
+
 /// Centralized, render-time page pipeline for the NON-DESTRUCTIVE model:
 /// always reads the immutable [originalPath], applies (in order) filter →
 /// rotation → optional corner watermark, and writes the processed result to
@@ -88,6 +90,15 @@ Future<String> _renderPageIsolate(_RenderArgs args) async {
       image = img.adjustColor(image, brightness: 1.08, contrast: 1.15);
     case 'high_contrast':
       image = img.contrast(image, contrast: 160);
+    // Professional scan modes — modular enhancement layer (shadow/illumination
+    // removal → whitening → adaptive contrast → text sharpen). See
+    // image_enhancer.dart. Added on top of the existing filters, not replacing.
+    case 'auto':
+      image = enhanceDocument(image, ScanMode.auto);
+    case 'magic':
+      image = enhanceDocument(image, ScanMode.magic);
+    case 'bw_text':
+      image = enhanceDocument(image, ScanMode.bwText);
     case 'original':
     default:
       break;

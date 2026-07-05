@@ -190,6 +190,18 @@
   "@scanFilterWarm": {
     "description": "Filter option: warm-tone paper look (lifts red, eases blue)"
   },
+  "scanFilterAuto": "Auto",
+  "@scanFilterAuto": {
+    "description": "Scan mode: balanced pro enhancement — shadow removal, whitening, contrast, sharpen"
+  },
+  "scanFilterMagic": "Magic Color",
+  "@scanFilterMagic": {
+    "description": "Scan mode: strong whitening + vivid colour, text/stamps preserved"
+  },
+  "scanFilterBwText": "B&W Text",
+  "@scanFilterBwText": {
+    "description": "Scan mode: OCR-optimised black text on clean white"
+  },
   "scanNoPagesYet": "No pages captured",
   "@scanNoPagesYet": {
     "description": "Shown if the scan session is somehow empty"
