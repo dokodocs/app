@@ -1,123 +1,90 @@
-"""Generates the DokoDocs launcher icon.
+"""Generates the DokoDocs launcher icon from the brand logo.
 
 Run: python generate_icon.py
 Produces (in this directory):
-  icon_1024.png            - full icon (green rounded-square bg + white
-                              glyph), used for iOS and as the Android
-                              legacy/round fallback
-  icon_foreground_1024.png - glyph only, transparent background, sized to
-                              Android's adaptive-icon safe zone (used with
-                              adaptive_icon_background in pubspec.yaml)
+  icon_1024.png            - full icon: the brand mark (green woven-basket +
+                             document) on a WHITE background, used for iOS and
+                             the Android legacy/round fallback.
+  icon_foreground_1024.png - the mark only, on a transparent background, sized
+                             into Android's adaptive-icon safe zone (used with
+                             adaptive_icon_background = #FFFFFF in pubspec.yaml).
+  logo_header.png          - 168x168 in-app header logo.
 
-No gradients, no text - a document outline with viewfinder-style scan
-corner brackets, per the brand icon spec. Regenerate + re-run
-`flutter pub run flutter_launcher_icons` after any change here.
+Source of truth is assets/logo/logo_dokodocs.svg (an Inkscape SVG wrapping a
+1254x1254 raster of the mark). The mark is green line-art on white; the white
+areas (paper, basket-weave gaps) are STRUCTURAL, so we keep a white background
+rather than knocking white out to transparent — otherwise the mark dissolves
+into a light launcher background and the icon looks empty. Regenerate + re-run
+`dart run flutter_launcher_icons` after any change here.
 """
 
-from PIL import Image, ImageDraw
+import base64
+import io
+import re
 
+from PIL import Image
+
+SVG = "../logo/logo_dokodocs.svg"
 CANVAS = 1024
-BRAND_GREEN = (46, 125, 107, 255)  # 0xFF2E7D6B, matches AppTheme's seed color
 WHITE = (255, 255, 255, 255)
 TRANSPARENT = (0, 0, 0, 0)
 
-# Document rectangle (portrait page), centered. Shrunk (v2, per user
-# feedback that the original was "too big"/not friendly) with more
-# negative space and thinner strokes for a softer, more professional
-# look — still sized (with the corner brackets below) to stay inside
-# Android's adaptive-icon safe zone, the center ~66% circle every
-# launcher mask shape (circle/squircle/rounded square/teardrop)
-# is guaranteed not to clip.
-DOC_W, DOC_H = 220, 280
-DOC_LEFT = (CANVAS - DOC_W) // 2
-DOC_TOP = (CANVAS - DOC_H) // 2 - 12
-DOC_RIGHT = DOC_LEFT + DOC_W
-DOC_BOTTOM = DOC_TOP + DOC_H
-DOC_RADIUS = 18
-FOLD = 36  # folded-corner size, top-right
 
-# Viewfinder corner brackets around the document — thinner stroke + rounded
-# end caps (small filled circles) for a "cuter" softer feel than PIL's
-# default flat line caps.
-PAD = 40
-BRACKET_ARM = 70
-BRACKET_STROKE = 16
+def load_mark() -> Image.Image:
+    """Extract the embedded raster from the Inkscape SVG and trim its white
+    margin down to the mark's bounding box."""
+    svg = open(SVG, "r", encoding="utf-8", errors="ignore").read()
+    m = re.search(r'href="data:image/(?:png|jpeg);base64,([^"]+)"', svg)
+    if not m:
+        raise SystemExit("no embedded raster found in " + SVG)
+    b64 = re.sub(r"&#\d+;", "", m.group(1))          # strip XML entities
+    b64 = re.sub(r"[^A-Za-z0-9+/=]", "", b64)          # strip whitespace
+    raw = base64.b64decode(b64 + "=" * (-len(b64) % 4))
+    im = Image.open(io.BytesIO(raw)).convert("RGBA")
 
+    # Trim the source's built-in white margin down to the mark's bounding box,
+    # via the per-pixel difference from pure white (the green line-art is the
+    # only thing that differs).
+    from PIL import ImageChops
 
-def draw_glyph(draw: ImageDraw.ImageDraw, color) -> None:
-    # Document body as a rounded rect, then cut a folded corner (top-right)
-    # by drawing a triangle in the "erase" color the caller supplies via a
-    # separate mask step (see build_foreground/build_full below).
-    draw.rounded_rectangle(
-        [DOC_LEFT, DOC_TOP, DOC_RIGHT, DOC_BOTTOM],
-        radius=DOC_RADIUS,
-        fill=color,
-    )
-
-    # Viewfinder corner brackets (camera/scan framing), one "L" per corner.
-    bx0, by0 = DOC_LEFT - PAD, DOC_TOP - PAD
-    bx1, by1 = DOC_RIGHT + PAD, DOC_BOTTOM + PAD
-    cap_r = BRACKET_STROKE / 2
-
-    def round_cap(x, y):
-        draw.ellipse([x - cap_r, y - cap_r, x + cap_r, y + cap_r], fill=color)
-
-    def l_bracket(x, y, dx, dy):
-        # dx/dy = +1/-1 indicating which way the arms point (into the icon)
-        x_end, y_end = x + BRACKET_ARM * dx, y + BRACKET_ARM * dy
-        draw.line([(x, y), (x_end, y)], fill=color, width=BRACKET_STROKE)
-        draw.line([(x, y), (x, y_end)], fill=color, width=BRACKET_STROKE)
-        round_cap(x, y)
-        round_cap(x_end, y)
-        round_cap(x, y_end)
-
-    l_bracket(bx0, by0, 1, 1)  # top-left
-    l_bracket(bx1, by0, -1, 1)  # top-right
-    l_bracket(bx0, by1, 1, -1)  # bottom-left
-    l_bracket(bx1, by1, -1, -1)  # bottom-right
+    rgb = im.convert("RGB")
+    diff = ImageChops.difference(rgb, Image.new("RGB", im.size, (255, 255, 255)))
+    diff = diff.convert("L").point(lambda p: 255 if p > 12 else 0)
+    bbox = diff.getbbox()
+    if bbox:
+        im = im.crop(bbox)
+    return im
 
 
-def build_full() -> Image.Image:
-    img = Image.new("RGBA", (CANVAS, CANVAS), TRANSPARENT)
-    draw = ImageDraw.Draw(img)
-    bg_radius = int(CANVAS * 0.18)
-    draw.rounded_rectangle([0, 0, CANVAS - 1, CANVAS - 1], radius=bg_radius, fill=BRAND_GREEN)
-    draw_glyph(draw, WHITE)
-    # Folded corner: cut a triangle out of the document's top-right, back
-    # down to the brand-green background color, then redraw the small
-    # fold flap in a slightly darker tone for depth-free "flat" contrast.
-    draw.polygon(
-        [
-            (DOC_RIGHT - FOLD, DOC_TOP),
-            (DOC_RIGHT, DOC_TOP),
-            (DOC_RIGHT, DOC_TOP + FOLD),
-        ],
-        fill=BRAND_GREEN,
-    )
-    return img
+def fit(mark: Image.Image, target: int, scale: float) -> Image.Image:
+    """Scale the mark to `scale` of a `target`x`target` box, preserving aspect."""
+    box = int(target * scale)
+    m = mark.copy()
+    m.thumbnail((box, box), Image.LANCZOS)
+    return m
 
 
-def build_foreground() -> Image.Image:
-    img = Image.new("RGBA", (CANVAS, CANVAS), TRANSPARENT)
-    draw = ImageDraw.Draw(img)
-    draw_glyph(draw, WHITE)
-    draw.polygon(
-        [
-            (DOC_RIGHT - FOLD, DOC_TOP),
-            (DOC_RIGHT, DOC_TOP),
-            (DOC_RIGHT, DOC_TOP + FOLD),
-        ],
-        fill=TRANSPARENT,
-    )
-    return img
+def compose(mark: Image.Image, bg, scale: float) -> Image.Image:
+    canvas = Image.new("RGBA", (CANVAS, CANVAS), bg)
+    m = fit(mark, CANVAS, scale)
+    x = (CANVAS - m.width) // 2
+    y = (CANVAS - m.height) // 2
+    canvas.alpha_composite(m, (x, y))
+    return canvas
 
 
 if __name__ == "__main__":
-    full = build_full()
-    full.save("icon_1024.png")
-    build_foreground().save("icon_foreground_1024.png")
-    # In-app header logo: a 28dp-logical-size asset, exported at 168x168
-    # (6x) so it stays sharp on the highest-density devices; Flutter's
-    # Image.asset scales it down to the actual logical size at render time.
-    full.resize((168, 168), Image.LANCZOS).save("logo_header.png")
+    mark = load_mark()
+    print("trimmed mark size:", mark.size)
+
+    # Full icon (iOS + Android legacy): mark on white, ~82% so it breathes
+    # inside the rounded-square/circle masks without touching the edges.
+    compose(mark, WHITE, 0.82).save("icon_1024.png")
+
+    # Adaptive foreground: mark on transparent, ~66% to stay inside Android's
+    # adaptive safe zone (paired with a white adaptive background in pubspec).
+    compose(mark, TRANSPARENT, 0.66).save("icon_foreground_1024.png")
+
+    # In-app header logo.
+    compose(mark, WHITE, 0.82).resize((168, 168), Image.LANCZOS).save("logo_header.png")
     print("Wrote icon_1024.png, icon_foreground_1024.png, logo_header.png")

@@ -116,6 +116,11 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon/icon_1024.png"
   min_sdk_android: 21
-  adaptive_icon_background: "#2E7D6B"
+  # The brand mark is green line-art on white, and its white areas (paper,
+  # basket-weave gaps) are structural — so the adaptive background is WHITE,
+  # not the brand green. A green background would show through the white
+  # portions and make the mark unreadable / "invisible". remove_alpha_ios
+  # stays true because the full icon is already opaque (white-backed).
+  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icon/icon_foreground_1024.png"
   remove_alpha_ios: true
