@@ -481,6 +481,10 @@
   "@scanSwitchCamera": {"description": "Tooltip for switching between rear and front camera"},
   "scanDocumentDetected": "Document detected",
   "@scanDocumentDetected": {"description": "Indicator shown when the live camera has found a document"},
+  "scanHoldSteady": "Hold steady…",
+  "@scanHoldSteady": {"description": "Shown at high confidence just before auto-capture fires"},
+  "scanAutoCapture": "Auto capture",
+  "@scanAutoCapture": {"description": "Tooltip for the auto-capture on/off toggle"},
   "scanSkippedImages": "{count, plural, =1{Skipped 1 image that couldn't be read} other{Skipped {count} images that couldn't be read}}",
   "@scanSkippedImages": {
     "description": "Shown when some picked gallery images could not be decoded and were skipped",

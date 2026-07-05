@@ -1,13 +1,17 @@
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import 'camera_scanner_screen.dart';
 import 'crop_editor_screen.dart';
+import 'document_detector.dart';
 import 'image_normalizer.dart';
 import 'providers/scan_session_provider.dart';
 import 'scan_review_screen.dart';
@@ -209,13 +213,35 @@ Future<List<String>> _captureWithCustomCamera(
     );
     if (shot == null) break; // user backed out of the camera
     if (!context.mounted) break;
-    // Auto-crop: open the editor (auto-detects corners) right after capture.
-    final cropped = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: shot)),
+
+    // Full-resolution re-detection + confidence-gated auto-crop. When the
+    // still is confidently a document we crop + perspective-correct it
+    // automatically and SKIP the manual editor (CamScanner-style). Only
+    // medium/low confidence falls through to the editor for adjustment.
+    final dir = await getTemporaryDirectory();
+    final outPath = p.join(
+      dir.path,
+      'autocrop_${DateTime.now().millisecondsSinceEpoch}.jpg',
     );
-    // If the user cancels the crop editor, keep the raw capture rather than
-    // losing the page.
-    paths.add(cropped ?? shot);
+    final result = await compute(autoDetectAndCrop, <String, dynamic>{
+      'srcPath': shot,
+      'outPath': outPath,
+    });
+    final confidence = (result['confidence'] as num).toDouble();
+    final autoPath = result['path'] as String;
+
+    if (confidence >= kHighConfidence && result['cropped'] == true) {
+      paths.add(autoPath); // trust the auto-crop, no editor
+    } else {
+      if (!context.mounted) break;
+      // Editor opens on the auto-cropped result when we had one (medium
+      // confidence), else the raw shot — it auto-detects corners either way.
+      final seed = result['cropped'] == true ? autoPath : shot;
+      final cropped = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: seed)),
+      );
+      paths.add(cropped ?? seed);
+    }
     if (!batch || !context.mounted) break;
   }
   return paths;

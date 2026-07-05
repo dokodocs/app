@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_localizations.dart';
 import 'camera_frame_utils.dart';
-import 'crop_processor.dart';
 import 'document_detector.dart';
 
 /// A custom document camera used as the fallback when the native ML Kit /
@@ -42,8 +41,17 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   bool _detecting = false; // a frame is being analysed
   DateTime _lastDetect = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Latest detected quad in NORMALISED (0..1) preview space, or null.
+  /// Smoothed detected quad in NORMALISED (0..1) preview space, or null.
   List<Offset>? _quadNorm;
+  double _confidence = 0;
+
+  /// Recent raw quads for temporal smoothing (anti-flicker).
+  final List<List<Offset>> _history = [];
+  static const _historyLen = 5;
+
+  /// Auto-capture: how long the document has been detected & stable.
+  DateTime? _stableSince;
+  bool _autoCapture = true;
 
   @override
   void initState() {
@@ -108,34 +116,83 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     // are not sendable to another isolate.)
     try {
       final gray = grayscaleFromCameraImage(frame);
-      Quad? quad;
+      DocDetection? det;
       if (gray != null) {
-        quad = detectDocumentQuad(gray);
+        det = detectDocument(gray);
       }
       if (!mounted) {
         _detecting = false;
         return;
       }
-      if (quad == null) {
+      if (det == null) {
+        // No confident document — clear the border and reset stability.
+        _history.clear();
+        _stableSince = null;
         if (_quadNorm != null) setState(() => _quadNorm = null);
       } else {
-        // Normalise by the small image's own size (detector returns coords in
-        // the grayscale image space, which shares the camera aspect ratio).
         final gw = gray!.width.toDouble();
         final gh = gray.height.toDouble();
+        final raw = [
+          Offset(det.quad.tl.x / gw, det.quad.tl.y / gh),
+          Offset(det.quad.tr.x / gw, det.quad.tr.y / gh),
+          Offset(det.quad.br.x / gw, det.quad.br.y / gh),
+          Offset(det.quad.bl.x / gw, det.quad.bl.y / gh),
+        ];
+        final smoothed = _smooth(raw);
+        _trackStability(smoothed);
         setState(() {
-          _quadNorm = [
-            Offset(quad!.tl.x / gw, quad.tl.y / gh),
-            Offset(quad.tr.x / gw, quad.tr.y / gh),
-            Offset(quad.br.x / gw, quad.br.y / gh),
-            Offset(quad.bl.x / gw, quad.bl.y / gh),
-          ];
+          _quadNorm = smoothed;
+          _confidence = det!.confidence;
         });
+        _maybeAutoCapture();
       }
     } catch (_) {
       // Never let a bad frame crash the preview.
     } finally {
       _detecting = false;
+    }
+  }
+
+  /// Temporal smoothing: rolling average of the last few quads so the border
+  /// doesn't flicker/jump between frames.
+  List<Offset> _smooth(List<Offset> raw) {
+    _history.add(raw);
+    if (_history.length > _historyLen) _history.removeAt(0);
+    final avg = List<Offset>.filled(4, Offset.zero);
+    for (final q in _history) {
+      for (var i = 0; i < 4; i++) {
+        avg[i] += q[i];
+      }
+    }
+    final n = _history.length.toDouble();
+    return [for (final p in avg) Offset(p.dx / n, p.dy / n)];
+  }
+
+  /// Tracks how long the detected quad has stayed roughly still — the trigger
+  /// for auto-capture.
+  void _trackStability(List<Offset> quad) {
+    final prev = _quadNorm;
+    if (prev == null || prev.length != 4) {
+      _stableSince = DateTime.now();
+      return;
+    }
+    var moved = 0.0;
+    for (var i = 0; i < 4; i++) {
+      moved += (quad[i] - prev[i]).distance;
+    }
+    // If corners moved more than ~2% of the frame total, it's not stable yet.
+    if (moved > 0.08) {
+      _stableSince = DateTime.now();
+    }
+  }
+
+  void _maybeAutoCapture() {
+    if (!_autoCapture || _busy) return;
+    if (_confidence < kHighConfidence) return; // only auto-fire when confident
+    final since = _stableSince;
+    if (since == null) return;
+    if (DateTime.now().difference(since).inMilliseconds >= 700) {
+      _capture();
     }
   }
 
@@ -177,6 +234,14 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
         _ => Icons.flash_on,
       };
 
+  /// Border/indicator colour by detection confidence: green (high) → orange
+  /// (medium) → red (low), matching the spec's confidence bands.
+  Color get _confidenceColor {
+    if (_confidence >= kHighConfidence) return const Color(0xFF3DDC84);
+    if (_confidence >= kMediumConfidence) return const Color(0xFFFFA726);
+    return const Color(0xFFEF5350);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -197,10 +262,10 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
             children: [
               // Full-screen preview (cover so it fills the screen).
               _CoverPreview(controller: controller),
-              // Live document outline.
+              // Live document outline, coloured by confidence.
               if (_quadNorm != null)
                 CustomPaint(
-                  painter: _LiveQuadPainter(_quadNorm!),
+                  painter: _LiveQuadPainter(_quadNorm!, _confidenceColor),
                 ),
               // Detection indicator.
               if (_quadNorm != null)
@@ -213,11 +278,13 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF3DDC84),
+                        color: _confidenceColor,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        l10n.scanDocumentDetected,
+                        _confidence >= kHighConfidence
+                            ? l10n.scanHoldSteady
+                            : l10n.scanDocumentDetected,
                         style: const TextStyle(
                             color: Colors.black, fontWeight: FontWeight.w600),
                       ),
@@ -239,6 +306,19 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
                     ),
                     Row(
                       children: [
+                        IconButton(
+                          icon: Icon(
+                            _autoCapture
+                                ? Icons.motion_photos_auto
+                                : Icons.motion_photos_off,
+                            color: _autoCapture
+                                ? const Color(0xFF3DDC84)
+                                : Colors.white,
+                          ),
+                          tooltip: l10n.scanAutoCapture,
+                          onPressed: () =>
+                              setState(() => _autoCapture = !_autoCapture),
+                        ),
                         IconButton(
                           icon: Icon(_flashIcon, color: Colors.white),
                           tooltip: l10n.scanFlash,
@@ -317,10 +397,12 @@ class _CoverPreview extends StatelessWidget {
   }
 }
 
-/// Paints the live detected quad in normalised (0..1) space over the preview.
+/// Paints the live detected quad in normalised (0..1) space over the preview,
+/// tinted by [color] (green/orange/red by confidence).
 class _LiveQuadPainter extends CustomPainter {
-  _LiveQuadPainter(this.quadNorm);
+  _LiveQuadPainter(this.quadNorm, this.color);
   final List<Offset> quadNorm;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -332,18 +414,23 @@ class _LiveQuadPainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = const Color(0x223DDC84)
+        ..color = color.withValues(alpha: 0.13)
         ..style = PaintingStyle.fill,
     );
     canvas.drawPath(
       path,
       Paint()
-        ..color = const Color(0xFF3DDC84)
+        ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
+    // Corner grips.
+    for (final p in pts) {
+      canvas.drawCircle(p, 7, Paint()..color = color);
+    }
   }
 
   @override
-  bool shouldRepaint(_LiveQuadPainter old) => old.quadNorm != quadNorm;
+  bool shouldRepaint(_LiveQuadPainter old) =>
+      old.quadNorm != quadNorm || old.color != color;
 }

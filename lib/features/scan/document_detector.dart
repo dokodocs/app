@@ -15,6 +15,60 @@ List<double>? detectQuadInFile(String path) {
   return detectDocumentQuad(image)?.toList();
 }
 
+/// Confidence thresholds shared by the capture flow (mirrors the spec):
+/// ≥ high → auto-crop and skip the editor; ≥ medium → auto-crop but open the
+/// editor for optional tweaks; below → open the editor for manual correction.
+const kHighConfidence = 0.86;
+const kMediumConfidence = 0.70;
+
+/// Isolate-safe full-resolution re-detection + confidence-gated auto-crop.
+///
+/// After capture we re-run detection on the FULL-resolution still (not the
+/// low-res preview), expand the quad by a small safety margin so no edge is
+/// clipped, perspective-correct it flat, and write the result. Returns a map:
+///   { 'path': String, 'confidence': double, 'cropped': bool }
+/// `cropped` is false (and `path` is the untouched original) when confidence
+/// is too low to trust — the caller then opens the manual editor.
+Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
+  final srcPath = args['srcPath'] as String;
+  final outPath = args['outPath'] as String;
+  final bytes = File(srcPath).readAsBytesSync();
+  final image = img.decodeImage(bytes);
+  if (image == null) {
+    return {'path': srcPath, 'confidence': 0.0, 'cropped': false};
+  }
+  final det = detectDocument(image);
+  if (det == null || det.confidence < kMediumConfidence) {
+    return {
+      'path': srcPath,
+      'confidence': det?.confidence ?? 0.0,
+      'cropped': false,
+    };
+  }
+  // Expand the quad outward by ~2.5% of the frame per side (clamped) so text /
+  // stamps near the edge are never clipped.
+  final mx = image.width * 0.025;
+  final my = image.height * 0.025;
+  ({double x, double y}) grow(({double x, double y}) p, double dx, double dy) =>
+      (
+        x: (p.x + dx).clamp(0, image.width - 1).toDouble(),
+        y: (p.y + dy).clamp(0, image.height - 1).toDouble(),
+      );
+  final q = det.quad;
+  final expanded = Quad(
+    grow(q.tl, -mx, -my),
+    grow(q.tr, mx, -my),
+    grow(q.br, mx, my),
+    grow(q.bl, -mx, my),
+  );
+  rectifyDocument(CropRequest(
+    srcPath: srcPath,
+    corners: expanded.toList(),
+    outPath: outPath,
+  ).toMap());
+  return {'path': outPath, 'confidence': det.confidence, 'cropped': true};
+}
+
 /// Lightweight, dependency-free document-quad detector.
 ///
 /// The native ML Kit / VisionKit scanner does this far better, but it isn't
@@ -30,10 +84,34 @@ List<double>? detectQuadInFile(String path) {
 ///   top-right = max(x-y),  bottom-left  = min(x-y)
 /// Returns corners in FULL-resolution [srcW]x[srcH] coordinates, or null when
 /// the page fills too little of the frame (so we never show a false border).
+/// A detected document with a 0..1 [confidence] (used to colour the live
+/// border green/orange/red and to gate the "document detected" indicator).
+class DocDetection {
+  const DocDetection(this.quad, this.confidence);
+  final Quad quad;
+  final double confidence;
+}
+
+/// Back-compat convenience: returns just the quad when a document is detected
+/// with usable confidence, else null.
 Quad? detectDocumentQuad(
   img.Image image, {
   int workWidth = 320,
-  double minAreaFraction = 0.12,
+}) =>
+    detectDocument(image, workWidth: workWidth)?.quad;
+
+/// Strict document detection. Returns null unless a genuinely page-like region
+/// is found — one that is bounded (NOT the whole frame), reasonably large, and
+/// densely fills its own bounding box (real paper does; scattered bright
+/// clutter doesn't). This is what stops the previous behaviour of "always
+/// detected" with edges that were really just the extremes of every bright
+/// pixel in the frame.
+DocDetection? detectDocument(
+  img.Image image, {
+  int workWidth = 320,
+  double minAreaFraction = 0.10,
+  double maxAreaFraction = 0.96,
+  double minFillRatio = 0.55,
 }) {
   final scale = workWidth / image.width;
   final w = workWidth;
@@ -41,17 +119,14 @@ Quad? detectDocumentQuad(
   if (w < 8 || h < 8) return null;
   final small = img.copyResize(image, width: w, height: h);
 
-  // Adaptive brightness threshold: mean luminance of the frame, biased up a
-  // little so only genuinely bright (paper) pixels pass.
   var sum = 0.0;
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
-      final p = small.getPixel(x, y);
-      sum += img.getLuminance(p);
+      sum += img.getLuminance(small.getPixel(x, y));
     }
   }
   final mean = sum / (w * h);
-  final threshold = math.min(245.0, mean * 1.08 + 12);
+  final threshold = math.min(245.0, mean * 1.10 + 14);
 
   double minSum = 1e9, maxSum = -1e9, minDiff = 1e9, maxDiff = -1e9;
   ({double x, double y})? tl, tr, br, bl;
@@ -61,10 +136,7 @@ Quad? detectDocumentQuad(
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       final p = small.getPixel(x, y);
-      final lum = img.getLuminance(p);
-      if (lum < threshold) continue;
-      // Low saturation guard: reject strongly coloured bright areas so a
-      // bright background object is less likely to hijack the detection.
+      if (img.getLuminance(p) < threshold) continue;
       final r = p.r.toDouble(), g = p.g.toDouble(), b = p.b.toDouble();
       final mx = math.max(r, math.max(g, b));
       final mn = math.min(r, math.min(g, b));
@@ -84,17 +156,44 @@ Quad? detectDocumentQuad(
       if (d < minDiff) { minDiff = d; bl = (x: x.toDouble(), y: y.toDouble()); }
     }
   }
-
   if (tl == null || tr == null || br == null || bl == null) return null;
 
-  // Reject when the detected region is too small (avoid false borders).
-  final boxArea = (maxX - minX) * (maxY - minY);
-  if (boxArea <= 0 || boxArea < minAreaFraction * w * h) return null;
-  if (count < 0.04 * w * h) return null;
+  final boxW = (maxX - minX).toDouble();
+  final boxH = (maxY - minY).toDouble();
+  final boxArea = boxW * boxH;
+  if (boxArea <= 0) return null;
 
-  // Map back to full-resolution coordinates.
+  final frameArea = (w * h).toDouble();
+  final areaFrac = boxArea / frameArea;
+  // Too small → not a page. Nearly the whole frame → no real edges were
+  // found (the old false-positive), so report nothing rather than a fake
+  // full-frame border.
+  if (areaFrac < minAreaFraction || areaFrac > maxAreaFraction) return null;
+
+  // Fill ratio: how much of the bounding box is actually bright paper. Real
+  // pages fill their box densely; scattered bright clutter does not.
+  final fillRatio = count / boxArea;
+  if (fillRatio < minFillRatio) return null;
+
+  // Quad must be a sane convex-ish rectangle: opposite sides comparable.
+  final topW = _dist(tl, tr), botW = _dist(bl, br);
+  final leftH = _dist(tl, bl), rightH = _dist(tr, br);
+  if (topW < 8 || botW < 8 || leftH < 8 || rightH < 8) return null;
+  final wRatio = math.min(topW, botW) / math.max(topW, botW);
+  final hRatio = math.min(leftH, rightH) / math.max(leftH, rightH);
+  if (wRatio < 0.55 || hRatio < 0.55) return null; // too skewed → distrust
+
+  // Confidence blends fill density and rectangularity.
+  final confidence =
+      (fillRatio.clamp(0.0, 1.0) * 0.5 + (wRatio + hRatio) / 2 * 0.5)
+          .clamp(0.0, 1.0);
+
   ({double x, double y}) up(({double x, double y}) pt) =>
       (x: pt.x / scale, y: pt.y / scale);
+  return DocDetection(Quad(up(tl), up(tr), up(br), up(bl)), confidence);
+}
 
-  return Quad(up(tl), up(tr), up(br), up(bl));
+double _dist(({double x, double y}) a, ({double x, double y}) b) {
+  final dx = a.x - b.x, dy = a.y - b.y;
+  return math.sqrt(dx * dx + dy * dy);
 }

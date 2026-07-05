@@ -164,6 +164,8 @@
   "scanFlash": "फ्ल्यास",
   "scanSwitchCamera": "क्यामेरा बदल्नुहोस्",
   "scanDocumentDetected": "कागजात फेला पर्‍यो",
+  "scanHoldSteady": "स्थिर राख्नुहोस्…",
+  "scanAutoCapture": "स्वतः खिच्ने",
   "scanSkippedImages": "{count, plural, =1{पढ्न नसकिने १ तस्बिर छाडियो} other{पढ्न नसकिने {count} तस्बिरहरू छाडिए}}",
   "scanSaveNameTitle": "कागजातको नाम राख्नुहोस्",
   "scanSaveNameHint": "कागजातको नाम",
