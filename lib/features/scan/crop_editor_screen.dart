@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import 'crop_geometry.dart';
 import 'crop_processor.dart';
+import 'document_detector.dart';
 
 /// A manual crop + perspective-correction editor for one captured page.
 ///
@@ -63,7 +64,20 @@ class _CropEditorScreenState extends State<CropEditorScreen> {
           Size(frame.image.width.toDouble(), frame.image.height.toDouble());
       _corners = _defaultCorners(_imageSize);
     });
+    // Auto-detect the document and seed the corners with it, so the green
+    // border lands on the actual page (not a fixed inset) — the "auto crop"
+    // that Reset falls back from. Runs off the UI isolate.
+    final detected = await compute(detectQuadInFile, widget.imagePath);
+    if (!mounted || detected == null) return;
+    setState(() => _corners = _quadToOffsets(Quad.fromList(detected)));
   }
+
+  List<Offset> _quadToOffsets(Quad q) => [
+        Offset(q.tl.x, q.tl.y),
+        Offset(q.tr.x, q.tr.y),
+        Offset(q.br.x, q.br.y),
+        Offset(q.bl.x, q.bl.y),
+      ];
 
   /// Default handles sit just inside the frame edges (by the shared
   /// [kSafetyMarginFraction]) so all four are visible and grabbable, and so

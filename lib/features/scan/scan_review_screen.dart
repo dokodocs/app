@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../editor/editor_screen.dart';
+import 'camera_scanner_screen.dart';
 import 'crop_editor_screen.dart';
 import 'document_builder.dart';
 import 'filter_preview.dart';
@@ -43,13 +43,11 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
         scannerSource: ScannerSource.camera,
       );
     } catch (_) {
-      // Google Play services / ML Kit unavailable — fall back to basic camera.
-      final shot = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-      );
-      if (shot == null) return;
-      paths = [shot.path];
+      // Google Play services / ML Kit unavailable — fall back to the custom
+      // rear-camera scanner + crop editor (never the front camera).
+      final captured = await _customCaptureAndCrop();
+      if (captured == null) return;
+      paths = [captured];
     }
     if (paths == null || paths.isEmpty) return;
     ref.read(scanSessionProvider.notifier).addPaths(paths);
@@ -63,17 +61,28 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
         noOfPages: 1,
       );
     } catch (_) {
-      final shot = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-      );
-      if (shot == null) return;
-      paths = [shot.path];
+      final captured = await _customCaptureAndCrop();
+      if (captured == null) return;
+      paths = [captured];
     }
     if (paths == null || paths.isEmpty) return;
     ref
         .read(scanSessionProvider.notifier)
         .replaceAt(_selectedIndex, paths.first);
+  }
+
+  /// Rear-camera capture + auto-crop editor, shared by add-page and retake
+  /// when the native scanner is unavailable. Returns the corrected path, or
+  /// null if the user backed out of the camera.
+  Future<String?> _customCaptureAndCrop() async {
+    final shot = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
+    );
+    if (shot == null || !mounted) return null;
+    final cropped = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: shot)),
+    );
+    return cropped ?? shot;
   }
 
   /// Opens the manual crop + perspective editor for the selected page and,

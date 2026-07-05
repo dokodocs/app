@@ -44,6 +44,15 @@ dependencies:
   # Document Scanner + iOS VisionKit, actively maintained, verified publisher.
   cunning_document_scanner: ^2.5.0
 
+  # Custom camera fallback (spec §1). The native ML Kit / VisionKit scanner is
+  # still the primary path, but when Google Play services / ML Kit is
+  # unavailable the old image_picker fallback opened the FRONT camera
+  # (image_picker's preferredCameraDevice is only a hint, ignored on most
+  # Android devices) and showed no live edge border. The `camera` package lets
+  # us STRICTLY select the rear (back) lens, show a full-screen preview, run a
+  # live document-detection overlay, and capture at high resolution.
+  camera: ^0.11.0
+
   # Phase 1 — filters (Original/Grayscale/B&W/brightness-contrast), spec-named.
   image: ^4.9.1
 

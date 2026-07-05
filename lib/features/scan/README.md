@@ -13,12 +13,32 @@ The **camera** path delegates to the OS document scanner, so it already provides
 
 These are the same on-device ML engines CamScanner / Adobe Scan / Microsoft Lens rely on, so we intentionally do **not** reimplement a custom camera + edge-detection pipeline.
 
-### The gap we fill ourselves — `crop_editor_screen.dart`
-Two page sources arrive **without** native edge-detection and previously got no crop at all:
-1. **Gallery import** (`image_picker.pickMultiImage`).
-2. The **basic-camera fallback** (`_captureWithBasicCamera`) used when Google Play services / ML Kit is unavailable.
+### The gap we fill ourselves — custom camera + crop editor
+The native scanner isn't available on every device (missing Google Play
+services), and gallery imports never go through it. Those paths used to fall
+back to `image_picker`, which **opened the front camera** (its rear hint is
+ignored on most Android devices) and had no edge detection. Replaced with:
 
-For these, the review screen exposes a **Crop** action opening `CropEditorScreen`: a full-bleed image with four **draggable corner handles** and a live green outline of exactly what will be kept (no false border where nothing was detected — the handles default to just inside the frame). Confirm warps the selected quad flat via `crop_processor.rectifyDocument` (`image` package `copyRectify`, run on a `compute()` isolate), preserving the document's true aspect ratio and every corner/margin/stamp inside the quad. Rotate and Reset live one tap away on the same review screen. Pure Flutter → identical on Android and iOS.
+**`camera_scanner_screen.dart`** — a custom camera on the `camera` package:
+STRICTLY selects the rear (back/primary-wide) lens, full-screen preview,
+capture button, flash On/Auto/Torch, back button, optional camera switch, and
+a **live green document outline** from throttled per-frame detection
+(`camera_frame_utils.dart` → grayscale → `document_detector.dart`). High-res
+capture with autofocus/exposure (camera plugin defaults).
+
+**`document_detector.dart`** — dependency-free quad detector (downscale →
+bright/low-saturation mask → extreme-point corners), with a min-area guard so
+no false border is drawn. Runs both on live frames and (via `compute`) on the
+captured still to seed the crop corners.
+
+**`crop_editor_screen.dart`** — opened automatically right after a fallback
+capture, and on demand from the review screen's **Crop** action for gallery
+imports. Full-bleed image, four **draggable corner handles** pre-seeded with
+the detected quad, live green outline + dim scrim, **Reset** (back to full
+frame), Confirm/Cancel. Confirm warps the quad flat via
+`crop_processor.rectifyDocument` (`image` `copyRectify` on a `compute()`
+isolate), preserving the document's true aspect ratio and every
+corner/margin/stamp. Pure Flutter → identical on Android and iOS.
 
 ## Key decision — resolved
 Scanner package: **`cunning_document_scanner`** — verified publisher, actively maintained, native OS-level scanner. See `docs/DEPENDENCIES.md`.

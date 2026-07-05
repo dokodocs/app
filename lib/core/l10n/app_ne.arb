@@ -157,6 +157,10 @@
   "dialogSave": "सेभ गर्नुहोस्",
 
   "commonShare": "सेयर गर्नुहोस्",
+  "commonBack": "पछाडि",
+  "scanFlash": "फ्ल्यास",
+  "scanSwitchCamera": "क्यामेरा बदल्नुहोस्",
+  "scanDocumentDetected": "कागजात फेला पर्‍यो",
   "scanSaveNameTitle": "कागजातको नाम राख्नुहोस्",
   "scanSaveNameHint": "कागजातको नाम",
 

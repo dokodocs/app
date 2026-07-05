@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
+import 'camera_scanner_screen.dart';
+import 'crop_editor_screen.dart';
 import 'providers/scan_session_provider.dart';
 import 'scan_review_screen.dart';
 
@@ -102,7 +104,8 @@ Future<void> _runCapture(
       _showScannerError(context, isGallery: true);
       return;
     }
-    final fallback = await _captureWithBasicCamera(noOfPages);
+    if (!context.mounted) return;
+    final fallback = await _captureWithCustomCamera(context, noOfPages);
     if (fallback.isEmpty) return; // user cancelled the fallback camera
     paths = fallback;
   }
@@ -167,23 +170,35 @@ Future<ScanChoice?> _chooseScanMode(BuildContext context) {
   );
 }
 
-/// Basic-camera fallback used when the ML Kit document scanner is unavailable
-/// (missing/outdated Google Play services). Captures one photo per shot; for
-/// batch mode ([noOfPages] > 1) it keeps offering to snap another until the
-/// user cancels. Returns the captured file paths (empty if none).
-Future<List<String>> _captureWithBasicCamera(int noOfPages) async {
-  final picker = ImagePicker();
+/// Custom-camera fallback used when the ML Kit document scanner is unavailable
+/// (missing/outdated Google Play services). Uses [CameraScannerScreen], which
+/// STRICTLY opens the rear lens (the old image_picker fallback opened the
+/// front camera because its rear hint is ignored on most Android devices) and
+/// shows a live green document border. Each captured page is passed straight
+/// into [CropEditorScreen] for auto-detect + manual adjust + perspective
+/// correction, so the crop happens right after the shot. For batch mode
+/// ([noOfPages] > 1) it keeps offering another page until the user backs out.
+/// Returns the corrected file paths (empty if none).
+Future<List<String>> _captureWithCustomCamera(
+  BuildContext context,
+  int noOfPages,
+) async {
   final paths = <String>[];
   final batch = noOfPages != 1;
   while (true) {
-    final shot = await picker.pickImage(
-      source: ImageSource.camera,
-      // Documents are shot with the rear camera — never default to selfie.
-      preferredCameraDevice: CameraDevice.rear,
+    final shot = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
     );
     if (shot == null) break; // user backed out of the camera
-    paths.add(shot.path);
-    if (!batch) break; // single-page mode: one shot only
+    if (!context.mounted) break;
+    // Auto-crop: open the editor (auto-detects corners) right after capture.
+    final cropped = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: shot)),
+    );
+    // If the user cancels the crop editor, keep the raw capture rather than
+    // losing the page.
+    paths.add(cropped ?? shot);
+    if (!batch || !context.mounted) break;
   }
   return paths;
 }

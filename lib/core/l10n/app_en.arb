@@ -461,6 +461,15 @@
   "commonShare": "Share",
   "@commonShare": {"description": "Generic share action label"},
 
+  "commonBack": "Back",
+  "@commonBack": {"description": "Generic back navigation label"},
+  "scanFlash": "Flash",
+  "@scanFlash": {"description": "Camera flash toggle tooltip"},
+  "scanSwitchCamera": "Switch camera",
+  "@scanSwitchCamera": {"description": "Tooltip for switching between rear and front camera"},
+  "scanDocumentDetected": "Document detected",
+  "@scanDocumentDetected": {"description": "Indicator shown when the live camera has found a document"},
+
   "scanSaveNameTitle": "Name your document",
   "@scanSaveNameTitle": {"description": "Title of the dialog that asks the user to name a document before saving"},
   "scanSaveNameHint": "Document name",
