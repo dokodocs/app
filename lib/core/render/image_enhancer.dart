@@ -50,7 +50,23 @@ enum ScanMode {
   book,
 }
 
+/// Longest-edge cap for enhancement. The pure-Dart per-pixel work
+/// (illumination removal, contrast, sharpen) scales with megapixels, so a
+/// 12 MP phone capture is punishingly slow and needlessly large for a
+/// document. ~2600 px long edge is ≈216 DPI on A4 — sharper than the PDF
+/// builder's assumed 200 DPI — so capping here dramatically speeds up
+/// enhancement (and shrinks output) with no visible quality loss for docs.
+const kEnhanceMaxEdge = 2600;
+
 img.Image enhanceDocument(img.Image src, ScanMode mode) {
+  // Downscale oversized captures once, up front, so every stage below works on
+  // a sensible resolution. Cheap resize now saves seconds of per-pixel work.
+  final longEdge = src.width > src.height ? src.width : src.height;
+  if (longEdge > kEnhanceMaxEdge) {
+    src = src.width >= src.height
+        ? img.copyResize(src, width: kEnhanceMaxEdge)
+        : img.copyResize(src, height: kEnhanceMaxEdge);
+  }
   switch (mode) {
     case ScanMode.auto:
       var out = removeIllumination(src, strength: 0.85);

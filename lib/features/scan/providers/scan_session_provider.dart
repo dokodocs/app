@@ -2,6 +2,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/scan_page.dart';
 
+/// Default enhancement applied to every freshly captured/imported page, so a
+/// scan looks clean and UNIFORM out of the box (shadow-removed, whitened,
+/// sharpened colour — the "Magic Color" look) without the user having to pick a
+/// filter per page. They can still switch any page (incl. back to Original) in
+/// the review/edit filter row.
+const kDefaultScanFilter = 'magic';
+
 /// Holds the in-progress multi-page scan session (capture -> reorder ->
 /// retake -> filter -> save). Cleared once the session is saved as a
 /// [Document], or discarded.
@@ -10,7 +17,10 @@ class ScanSessionNotifier extends Notifier<List<ScanPage>> {
   List<ScanPage> build() => const [];
 
   void addPaths(List<String> paths) {
-    state = [...state, ...paths.map((p) => ScanPage(imagePath: p))];
+    state = [
+      ...state,
+      ...paths.map((p) => ScanPage(imagePath: p, filter: kDefaultScanFilter)),
+    ];
   }
 
   /// `newIndex` is expected already adjusted for the removed item at
@@ -32,7 +42,9 @@ class ScanSessionNotifier extends Notifier<List<ScanPage>> {
     final list = [...state];
     list[index] = list[index].copyWith(
       imagePath: newImagePath,
-      filter: 'original',
+      // A retaken/auto-cropped page keeps the default enhancement so the set
+      // stays uniform (was 'original', which left retakes looking different).
+      filter: kDefaultScanFilter,
       rotation: 0,
     );
     state = list;
