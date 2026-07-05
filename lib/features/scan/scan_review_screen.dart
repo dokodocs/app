@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -37,43 +36,19 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
   bool _isSaving = false;
 
   Future<void> _addPage() async {
-    List<String>? paths;
-    try {
-      paths = await CunningDocumentScanner.getPictures(
-        scannerSource: ScannerSource.camera,
-      );
-    } catch (_) {
-      // Google Play services / ML Kit unavailable — fall back to the custom
-      // rear-camera scanner + crop editor (never the front camera).
-      final captured = await _customCaptureAndCrop();
-      if (captured == null) return;
-      paths = [captured];
-    }
-    if (paths == null || paths.isEmpty) return;
-    ref.read(scanSessionProvider.notifier).addPaths(paths);
+    final captured = await _customCaptureAndCrop();
+    if (captured == null) return;
+    ref.read(scanSessionProvider.notifier).addPaths([captured]);
   }
 
   Future<void> _retakeSelected() async {
-    List<String>? paths;
-    try {
-      paths = await CunningDocumentScanner.getPictures(
-        scannerSource: ScannerSource.camera,
-        noOfPages: 1,
-      );
-    } catch (_) {
-      final captured = await _customCaptureAndCrop();
-      if (captured == null) return;
-      paths = [captured];
-    }
-    if (paths == null || paths.isEmpty) return;
-    ref
-        .read(scanSessionProvider.notifier)
-        .replaceAt(_selectedIndex, paths.first);
+    final captured = await _customCaptureAndCrop();
+    if (captured == null) return;
+    ref.read(scanSessionProvider.notifier).replaceAt(_selectedIndex, captured);
   }
 
-  /// Rear-camera capture + auto-crop editor, shared by add-page and retake
-  /// when the native scanner is unavailable. Returns the corrected path, or
-  /// null if the user backed out of the camera.
+  /// OpenCV rear-camera capture + auto-crop editor, shared by add-page and
+  /// retake. Returns the corrected path, or null if the user backed out.
   Future<String?> _customCaptureAndCrop() async {
     final shot = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const CameraScannerScreen()),

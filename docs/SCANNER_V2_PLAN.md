@@ -184,8 +184,15 @@ the default until V2 is verified on-device.
   keeps the camera open, shows a page counter + Done button, returns all
   pages at once (no dashboard bounce between pages); each is then
   auto-cropped/edited.
-- **Next (optional):** OpenCV enhancement modes (CLAHE/adaptive threshold),
-  iOS on-device validation, OCR phase.
+- **ML Kit fully removed (2026-07-06):** per decision to go OpenCV-only,
+  `cunning_document_scanner` is dropped entirely. The camera path (initial
+  scan, add-page, retake, editor add-page) uses only the OpenCV
+  `CameraScannerScreen`; Device status no longer tests ML Kit; the manifest
+  `docscanner` meta-data is removed. No ML Kit / VisionKit / Play-services
+  dependency anywhere. This permanently eliminates the S24+ NPE.
+- **Next (optional):** V2.4 OpenCV enhancement modes (CLAHE/adaptive
+  threshold — enhancement currently uses the pure-Dart `image` pipeline),
+  iOS on-device validation, V2.7 OCR.
 
 ## Immediate next step (if approved)
 

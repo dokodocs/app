@@ -39,18 +39,12 @@ dependencies:
   # flutter_localizations/gen-l10n, not a new architectural dependency.
   intl: ^0.20.2
 
-  # Phase 1 — scan capture/edge-detect. Your pick over flutter_doc_scanner /
-  # custom camera+opencv_dart (docs/DEPENDENCIES.md): wraps Android ML Kit
-  # Document Scanner + iOS VisionKit, actively maintained, verified publisher.
-  cunning_document_scanner: ^2.5.0
-
-  # Custom camera fallback (spec §1). The native ML Kit / VisionKit scanner is
-  # still the primary path, but when Google Play services / ML Kit is
-  # unavailable the old image_picker fallback opened the FRONT camera
-  # (image_picker's preferredCameraDevice is only a hint, ignored on most
-  # Android devices) and showed no live edge border. The `camera` package lets
-  # us STRICTLY select the rear (back) lens, show a full-screen preview, run a
-  # live document-detection overlay, and capture at high resolution.
+  # Scanner (V2): the app owns the whole vision pipeline — the `camera`
+  # package for full lens/resolution/stream control, and OpenCV (dartcv4) for
+  # edge detection, quad finding and perspective warp. Works identically on
+  # every Android + iOS device with NO Google Play services / ML Kit
+  # dependency (ML Kit Document Scanner 16.0.0 NPEs on some devices, e.g.
+  # Samsung S24+, with no app-side fix). See docs/SCANNER_V2_PLAN.md.
   camera: ^0.11.0
 
   # Phase 1 — filters (Original/Grayscale/B&W/brightness-contrast), spec-named.

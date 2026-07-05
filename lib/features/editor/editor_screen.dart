@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +14,8 @@ import '../../core/render/document_export.dart';
 import '../../core/render/page_renderer.dart';
 import '../../core/render/signature_compositor.dart';
 import '../pdf_viewer/pdf_viewer_screen.dart';
+import '../scan/camera_scanner_screen.dart';
+import '../scan/crop_editor_screen.dart';
 import '../scan/widgets/filter_picker.dart';
 import '../signature/signature_placement_screen.dart';
 import '../signature/signatures_screen.dart';
@@ -127,22 +128,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   Future<void> _addPage(Document document, List<DocPage> pages) async {
     setState(() => _isWorking = true);
     try {
-      List<String>? paths;
-      try {
-        paths = await CunningDocumentScanner.getPictures(
-          scannerSource: ScannerSource.camera,
-        );
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context).scanScannerError),
-            ),
-          );
-        }
-        return;
-      }
-      if (paths == null || paths.isEmpty) return;
+      // Capture one more page with the OpenCV scanner + crop editor.
+      final shot = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
+      );
+      if (shot == null || !mounted) return;
+      final cropped = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: shot)),
+      );
+      final paths = <String>[cropped ?? shot];
 
       final docFolder = p.dirname(pages.first.originalImagePath);
       var nextOrder = pages.length;

@@ -47,16 +47,6 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Force Google Play to download the ML Kit Document Scanner module at
-             INSTALL time. Without this, the module is only fetched on first use
-             and often fails to download (emulators, slow/absent Play services),
-             which makes CunningDocumentScanner.getPictures throw — so the app
-             silently falls back to the built-in camera and the user never gets
-             the native live edge detection / auto-crop. This is the documented
-             requirement for the ML Kit Document Scanner. -->
-        <meta-data
-            android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="docscanner" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
