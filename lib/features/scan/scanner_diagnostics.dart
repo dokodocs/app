@@ -16,8 +16,17 @@ class ScannerDiagnostics {
   /// When [lastNativeError] was recorded (for display), millis since epoch.
   static int? lastErrorAtMillis;
 
-  static void recordNativeError(Object error) {
-    lastNativeError = error.toString();
+  static void recordNativeError(Object error, [StackTrace? stackTrace]) {
+    final buf = StringBuffer(error.toString());
+    // PlatformException carries the native (Java/Kotlin) stack in .stacktrace,
+    // which is the useful part for diagnosing an ML Kit NPE — include it.
+    try {
+      final dynamic e = error;
+      final native = e.stacktrace ?? e.stackTrace;
+      if (native != null) buf.write('\n\nNative stack:\n$native');
+    } catch (_) {/* not a PlatformException */}
+    if (stackTrace != null) buf.write('\n\nDart stack:\n$stackTrace');
+    lastNativeError = buf.toString();
     lastPath = ScannerPath.fallback;
   }
 

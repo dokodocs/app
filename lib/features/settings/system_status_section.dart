@@ -143,6 +143,7 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
   }
 
   Widget _scannerDiagnostics(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final path = ScannerDiagnostics.lastPath;
     final err = ScannerDiagnostics.lastNativeError;
     final pathLabel = switch (path) {
@@ -159,13 +160,41 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
               style: Theme.of(context).textTheme.bodySmall),
           if (err != null) ...[
             const SizedBox(height: 4),
-            InkWell(
-              onTap: () => Clipboard.setData(ClipboardData(text: err)),
-              child: Text(
-                'Last native scanner error (tap to copy):\n$err',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+            Text(
+              'Last native scanner error:',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 160),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  err,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.copy, size: 16),
+                label: Text(l10n.commonCopy),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: err));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(l10n.commonCopied)),
+                    );
+                  }
+                },
               ),
             ),
           ],

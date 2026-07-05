@@ -1,6 +1,7 @@
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
@@ -123,7 +124,7 @@ Future<void> _runCapture(
     // status), then fall back to the built-in camera so capture still works.
     debugPrint('Native document scanner failed: $error');
     debugPrintStack(stackTrace: stackTrace);
-    ScannerDiagnostics.recordNativeError(error);
+    ScannerDiagnostics.recordNativeError(error, stackTrace);
 
     if (isGallery) {
       if (!context.mounted) return;
@@ -263,14 +264,57 @@ void _showSkippedImages(BuildContext context, int count) {
 
 void _showUsingFallbackCamera(BuildContext context, Object error) {
   final l10n = AppLocalizations.of(context);
-  // Include a short form of the real error so we can diagnose why the native
-  // scanner didn't start (full text is in Settings → Device status).
   final short = error.toString();
   final trimmed = short.length > 120 ? '${short.substring(0, 120)}…' : short;
-  ScaffoldMessenger.of(context).showSnackBar(
+  final full = ScannerDiagnostics.lastNativeError ?? short;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
     SnackBar(
-      duration: const Duration(seconds: 6),
+      duration: const Duration(seconds: 8),
       content: Text('${l10n.scanUsingFallbackCamera}\n$trimmed'),
+      action: SnackBarAction(
+        label: l10n.scanErrorDetails,
+        onPressed: () => showScannerErrorDialog(context, full),
+      ),
+    ),
+  );
+}
+
+/// A scrollable, SELECTABLE dialog showing the full native-scanner error with
+/// a Copy button — so the whole log can be copied and shared for diagnosis.
+Future<void> showScannerErrorDialog(BuildContext context, String fullError) {
+  final l10n = AppLocalizations.of(context);
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(l10n.scanErrorDetails),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            fullError,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          icon: const Icon(Icons.copy, size: 18),
+          label: Text(l10n.commonCopy),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: fullError));
+            if (dialogContext.mounted) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                SnackBar(content: Text(l10n.commonCopied)),
+              );
+            }
+          },
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(l10n.dialogClose),
+        ),
+      ],
     ),
   );
 }
