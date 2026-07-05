@@ -4,6 +4,29 @@
 
 **How to use this file:** Treat every unchecked box as a release blocker. Nothing ships to a production track until Part A (Build Readiness Gate) is fully checked. Nothing goes to public production until the platform-specific checklist in Part C (Play) and Part D (App Store) is fully checked.
 
+> **Last policy review: 2026-07-05.** Store policies change often. Re-verify Part A0, the target-API dates in Part C, and the privacy-manifest rule in Part D against the official console help before every release cycle. Sources for the 2026 rules are listed at the bottom of this file.
+
+---
+
+## Part A0 — Pre-Build Checklist (RUN EVERY TIME before generating any APK / AAB / IPA)
+
+This is the fast gate the team asked for: **do not run `flutter build ...` until every box here is green.** It is deliberately short so it can be run on every build, not just release day. Part A (below) is the deeper, once-per-release gate.
+
+**Automated helper:** run `bash tool/prebuild_check.sh` (or `pwsh tool/prebuild_check.ps1` on Windows) — it checks the mechanical items marked ⚙ below and exits non-zero if any fail.
+
+- [ ] ⚙ `flutter analyze` is clean (0 issues)
+- [ ] ⚙ `flutter test` passes
+- [ ] ⚙ No debug/staging leftovers in `lib/`: no `localhost`, `10.0.2.2`, `ngrok`, hardcoded API keys/tokens, or `TODO: remove` shims in code that ships
+- [ ] ⚙ No stray `print(` in `lib/` (use gated logging only)
+- [ ] ⚙ `version:` in `pubspec.yaml` was bumped since the last store upload (both name and +build number) — you cannot re-upload the same build number
+- [ ] ⚙ **Android** `targetSdk`/`compileSdk` resolve to **36 (Android 16)** or higher — required for new Play submissions from 2026-08-31 (see Part C Step 2)
+- [ ] ⚙ **iOS** `ios/Runner/PrivacyInfo.xcprivacy` exists and is in the Runner target (see Part D Step 2)
+- [ ] ⚙ Secrets are NOT staged for commit: `android/key.properties`, `*.jks`, `*.keystore`, App Store API keys are all git-ignored
+- [ ] Manual: launch the built artifact once and confirm the full flow (scan → crop → filter → save → PDF → share) does not crash
+- [ ] Manual: confirm the build channel/flavor is **release**, not debug, for anything leaving your machine
+
+**If any ⚙ box fails, the build is not allowed to proceed.** Fix, then re-run the helper.
+
 ---
 
 ## Part A — Build Readiness Gate (before touching either console)
@@ -63,8 +86,9 @@ This gate must pass before any store work begins. It is the same bar as the mast
 - [ ] Enable **Play App Signing** in Play Console so Google manages/rotates the app signing key
 - [ ] `key.properties` / keystore credentials excluded from git via `.gitignore` — confirm they were never committed, including in prior commits
 
-### Step 2 — Build format
+### Step 2 — Build format & target API level
 - [ ] Build is an **Android App Bundle (.aab)** — required for all new apps since Aug 2021, plain `.apk` uploads are not accepted for new app listings
+- [ ] **Target API level 36 (Android 16)** or higher — from **2026-08-31**, all new apps AND updates must target Android 16 (API 36); Wear OS / Android TV must target at least API 35. **Current status: compliant** — this project uses `targetSdk = flutter.targetSdkVersion`, which resolves to **36** on the pinned Flutter 3.44. Re-verify this after any Flutter upgrade/downgrade (an older Flutter could silently lower it); pin an explicit `targetSdk = 36` in `android/app/build.gradle.kts` if you ever want to decouple from the Flutter default. A build targeting an old API is rejected at upload.
 - [ ] R8/Proguard (code shrinking) enabled for the release build
 - [ ] Release build manually smoke-tested after shrinking (aggressive shrinking occasionally strips code that's only reached via reflection — verify nothing broke)
 
@@ -82,8 +106,11 @@ This gate must pass before any store work begins. It is the same bar as the mast
 - [ ] Guest access confirmed reachable without forcing sign-up first — required both by policy expectation and by DokoDocs' own trust positioning
 
 ### Step 5 — Testing tracks (use them in this order, do not jump straight to Production)
+
+> **⚠️ Hard gate for new PERSONAL Play accounts (created after 2023-11-13):** you must run **Closed testing with at least 12 testers who stay opted-in for 14 continuous days** before you can even *apply* for production access (approval then takes up to ~7 days). Organization accounts and personal accounts created before 2023-11-13 are exempt. **If you are on a new personal account, plan ~3 weeks of lead time for this — it is the single most common reason first launches slip.** Consider an **organization account** to skip this entirely (needs a D-U-N-S number).
+
 - [ ] **Internal testing** track — fastest, small trusted group (you + core team), validates the pipeline end-to-end
-- [ ] **Closed testing** track — the 100–200 Nepal beta testers (Pulchowk/KU/TU students, law offices, cooperatives, school admin, freelancers per the launch plan); collect feedback via a form + Discord/Telegram
+- [ ] **Closed testing** track — meets the 12-testers-for-14-days rule above (recruit real testers, not throwaway accounts — Google can reject bought/fake tester lists), and doubles as the 100–200 Nepal beta testers (Pulchowk/KU/TU students, law offices, cooperatives, school admin, freelancers per the launch plan); collect feedback via a form + Discord/Telegram
 - [ ] Beta exit criteria met: crash-free rate > 99%, top-10 reported issues fixed, scan-to-PDF success rate acceptable
 - [ ] (Optional) **Open testing** track if you want a public beta before full production
 - [ ] Staged rollout configured for the Production release (e.g. start at 10–20%, watch pre-launch report + vitals, ramp up) rather than 100% on day one
@@ -112,6 +139,7 @@ This gate must pass before any store work begins. It is the same bar as the mast
 
 ### Step 1 — Prerequisites
 - [ ] Apple Developer Program active ($99/year)
+- [ ] **Built with the required Xcode / iOS SDK version** — from **2026-04**, submissions must be built with the **Xcode 26 SDK** (iOS 18/26 SDK) or later. An older SDK is rejected at upload. (This is why the build must run on an up-to-date Mac / cloud-Mac CI; it cannot be built on Windows at all.)
 - [ ] Xcode project has a unique Bundle Identifier matching the reverse-DNS name locked in Part B4
 - [ ] `CFBundleShortVersionString` (marketing version) and `CFBundleVersion` (build number) set and incremented per build
 - [ ] Code signed with a valid Apple Distribution certificate; provisioning profile in place (automatic signing via Xcode is fine for a small team)
@@ -120,6 +148,8 @@ This gate must pass before any store work begins. It is the same bar as the mast
 ### Step 2 — Required platform-specific items unique to iOS
 - [ ] **Sign in with Apple implemented if Google Sign-In is offered** — Apple requires apps that offer a third-party login (Google Sign-In) to also offer Sign in with Apple as an equivalent option. This is already reflected as an explicit auth screen requirement in the product spec (Section 4) — confirm it before submission, since this is one of Apple's most common rejection reasons for apps that only wire up Google Sign-In first
 - [ ] `Info.plist` usage strings written for every requested permission (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription`, `NSFaceIDUsageDescription` if/when app lock ships) — each string must clearly explain *why*, not just restate the permission name
+- [ ] **Privacy manifest present and correct** — `ios/Runner/PrivacyInfo.xcprivacy` exists, is added to the Runner target (Target Membership ticked), declares `NSPrivacyTracking`, collected data types, and a valid reason code for every required-reason API used. **Missing/incorrect manifest = automatic rejection since 2024-05-01.** Every third-party SDK bundled must also ship its own manifest (the Flutter engine and current plugins do; verify after `pod install`).
+- [ ] **Privacy Report validated** — in Xcode run *Product → Generate Privacy Report* and confirm the merged report (app + all SDK manifests) has no missing declarations before archiving
 
 ### Step 3 — Build & internal test via TestFlight
 - [ ] Archive built in Xcode, uploaded via Organizer (or CI with `xcrun altool`/Transporter)
@@ -170,6 +200,33 @@ This gate must pass before any store work begins. It is the same bar as the mast
 
 ---
 
+## Part H — DO / DON'T (the fast rules to avoid rejection or a ban)
+
+These are the behaviors that get apps **removed or accounts banned** — not just a single build rejected. Internalize them.
+
+### ✅ DO
+- **DO** keep the Play Data Safety form, the Apple App Privacy form, and the hosted Privacy Policy **saying the exact same thing.** Mismatches between the three are a top trigger for manual review and enforcement flags.
+- **DO** request only permissions you use *right now*, each with an honest rationale string. Add a permission in the release that first uses it — never pre-request.
+- **DO** offer **Sign in with Apple** whenever Google Sign-In is offered (Apple hard rule), and provide an **in-app account+data deletion** path whenever accounts exist (Play hard rule).
+- **DO** make guest mode reachable without a forced sign-up, and **tell the reviewer** (in Apple review notes) that no login is needed to test core scanning.
+- **DO** back up the Android release keystore in ≥2 places before first upload — losing it means you can never update the listing.
+- **DO** bump the version/build number on every upload, and test the *shrunk* release build (R8 can strip reflection-reached code).
+- **DO** use the testing tracks in order (Internal → Closed → Production, staged rollout), and satisfy the 12-testers/14-day rule if on a new personal Play account.
+- **DO** re-check store policies before each release — the dated rules in this file (target API, privacy manifest, testers) move.
+
+### ❌ DON'T
+- **DON'T** ship placeholder/"Coming soon"/Lorem Ipsum screens, or screenshots showing features (sync, OCR, paywalls) that aren't in the shipped build. Advertising unbuilt features = rejection.
+- **DON'T** declare "no data collected" while an SDK quietly collects — false privacy declarations are treated as bad-faith and risk account-level action.
+- **DON'T** request sensitive permissions (location, contacts, all-files access, background mic/camera) without a justified, visible in-app use. Play actively rejects these.
+- **DON'T** include ads or third-party tracking SDKs in a build declared "no ads / no tracking."
+- **DON'T** use `com.example.*` or any placeholder bundle/package id, or change it after first submission (it's permanent per listing).
+- **DON'T** submit an iOS build without a `PrivacyInfo.xcprivacy`, or an Android build targeting an old API level — both are auto-rejected before human review.
+- **DON'T** buy/fake testers to pass the 12-tester rule, submit misleading metadata, or operate multiple accounts to evade a rejection — these escalate from rejection to **account termination**.
+- **DON'T** ship debug builds, verbose logging, or dev endpoints to production (see Part A0).
+- **DON'T** collect data from children or a general audience beyond what your content rating / target-audience declaration allows.
+
+---
+
 ## Part F — Platform Economics Reference (for monetization planning, not required for the free Phase 1 launch)
 
 These figures apply if/when a store-billed purchase path is ever added (the corporate license itself is planned to route through eSewa/Khalti/FonePay outside the stores, per the Nepal launch plan, so this section is informational, not a blocker):
@@ -192,3 +249,13 @@ Ship to **public Production / public App Store release** only when:
 6. Nepal closed-beta exit criteria met: crash-free rate > 99%, top reported issues resolved
 
 If any item is unchecked, the release is **not** ready — return to the relevant phase of the master prompt or the relevant step above rather than skipping ahead.
+
+---
+
+## Sources (2026 policy rules cited above — re-verify each release)
+
+- Google Play target API level (Android 16 / API 36 from 2026-08-31): https://support.google.com/googleplay/android-developer/answer/11926878 and https://developer.android.com/google/play/requirements/target-sdk
+- Google Play closed-testing 12-testers/14-days for new personal accounts: https://support.google.com/googleplay/android-developer/answer/14151465
+- Apple privacy manifest (`PrivacyInfo.xcprivacy`) requirement, enforced 2024-05-01: https://developer.apple.com/documentation/bundleresources/adding-a-privacy-manifest-to-your-app-or-third-party-sdk and https://developer.apple.com/news/?id=3d8a9yyh
+- Apple required-reason API reason codes: https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api
+- Apple Xcode/SDK minimum for submissions: https://developer.apple.com/news/
