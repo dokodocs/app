@@ -1,8 +1,10 @@
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/l10n/app_localizations.dart';
+import '../scan/scanner_diagnostics.dart';
 
 /// A "Device status" checklist in Settings: shows, at a glance, whether the
 /// device capabilities DokoDocs relies on are actually available here —
@@ -55,8 +57,11 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
         noOfPages: 1,
       );
       ok = true;
-    } catch (_) {
+      ScannerDiagnostics.recordNativeSuccess();
+    } catch (error) {
       ok = false;
+      // Record the real reason so it's visible below, not swallowed.
+      ScannerDiagnostics.recordNativeError(error);
     }
     if (!mounted) return;
     final l10n = AppLocalizations.of(context);
@@ -128,7 +133,44 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
           title: l10n.statusLocalStorage,
           status: _Status.ok,
         ),
+        // Diagnostics: last scanner path + the ACTUAL native-scanner error
+        // (so "why fallback?" is answerable on-device). Long-press to copy.
+        if (ScannerDiagnostics.lastPath != null ||
+            ScannerDiagnostics.lastNativeError != null)
+          _scannerDiagnostics(context),
       ],
+    );
+  }
+
+  Widget _scannerDiagnostics(BuildContext context) {
+    final path = ScannerDiagnostics.lastPath;
+    final err = ScannerDiagnostics.lastNativeError;
+    final pathLabel = switch (path) {
+      ScannerPath.native => 'Native ML Kit / VisionKit',
+      ScannerPath.fallback => 'Built-in fallback camera',
+      null => 'Not used yet',
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Scanner path: $pathLabel',
+              style: Theme.of(context).textTheme.bodySmall),
+          if (err != null) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () => Clipboard.setData(ClipboardData(text: err)),
+              child: Text(
+                'Last native scanner error (tap to copy):\n$err',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

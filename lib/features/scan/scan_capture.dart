@@ -13,6 +13,7 @@ import 'camera_scanner_screen.dart';
 import 'crop_editor_screen.dart';
 import 'document_detector.dart';
 import 'image_normalizer.dart';
+import 'scanner_diagnostics.dart';
 import 'providers/scan_session_provider.dart';
 import 'scan_review_screen.dart';
 
@@ -114,24 +115,25 @@ Future<void> _runCapture(
         scannerSource: source,
         noOfPages: noOfPages,
       );
+      ScannerDiagnostics.recordNativeSuccess();
     }
-  } catch (error) {
-    // The ML Kit document scanner requires up-to-date Google Play services and
-    // fails outright on devices/emulators without it — the "cannot open
-    // camera / Google Play services issue". Rather than dead-end with an
-    // error, fall back to the plain system camera (image_picker) so the user
-    // can still capture a page. Gallery import has no such dependency.
+  } catch (error, stackTrace) {
+    // Record the REAL reason the native scanner didn't run (previously
+    // swallowed) so it's visible in logs and on-device (Settings → Device
+    // status), then fall back to the built-in camera so capture still works.
+    debugPrint('Native document scanner failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    ScannerDiagnostics.recordNativeError(error);
+
     if (isGallery) {
       if (!context.mounted) return;
       _showScannerError(context, isGallery: true);
       return;
     }
     if (!context.mounted) return;
-    // Tell the user which scanner they're actually using: the native ML Kit /
-    // VisionKit scanner failed to open, so we're on the built-in fallback
-    // camera. Makes the active path visible (Settings → Device status has the
-    // scanner self-test for confirmation).
-    _showUsingFallbackCamera(context);
+    // Surface the actual error to the user (truncated) so the fallback is no
+    // longer a silent dead-end — this is the diagnostic signal.
+    _showUsingFallbackCamera(context, error);
     final fallback = await _captureWithCustomCamera(context, noOfPages);
     if (fallback.isEmpty) return; // user cancelled the fallback camera
     paths = fallback;
@@ -259,10 +261,17 @@ void _showSkippedImages(BuildContext context, int count) {
   );
 }
 
-void _showUsingFallbackCamera(BuildContext context) {
+void _showUsingFallbackCamera(BuildContext context, Object error) {
   final l10n = AppLocalizations.of(context);
+  // Include a short form of the real error so we can diagnose why the native
+  // scanner didn't start (full text is in Settings → Device status).
+  final short = error.toString();
+  final trimmed = short.length > 120 ? '${short.substring(0, 120)}…' : short;
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(l10n.scanUsingFallbackCamera)),
+    SnackBar(
+      duration: const Duration(seconds: 6),
+      content: Text('${l10n.scanUsingFallbackCamera}\n$trimmed'),
+    ),
   );
 }
 
