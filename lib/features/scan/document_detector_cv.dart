@@ -109,3 +109,51 @@ CvDetection? detectDocumentCvFile(String path) {
     return null;
   }
 }
+
+/// Perspective-warp the quad [corners] (8 doubles TL,TR,BR,BL in source-image
+/// pixels) of the image at [srcPath] to a flat rectangle, written as JPEG to
+/// [outPath]. Uses OpenCV `getPerspectiveTransform` + `warpPerspective` — more
+/// accurate than the pure-Dart bilinear warp. Returns [outPath], or null on
+/// failure so the caller can fall back to [rectifyDocument].
+String? warpQuadCv(String srcPath, List<double> corners, String outPath) {
+  cv.Mat? src, m, out;
+  cv.VecPoint? srcPts, dstPts;
+  try {
+    src = cv.imread(srcPath, flags: cv.IMREAD_COLOR);
+    if (src.isEmpty) return null;
+    final q = Quad.fromList(corners);
+    double dist(({double x, double y}) a, ({double x, double y}) b) =>
+        math.sqrt(math.pow(a.x - b.x, 2) + math.pow(a.y - b.y, 2));
+    final wTop = dist(q.tl, q.tr), wBot = dist(q.bl, q.br);
+    final hLeft = dist(q.tl, q.bl), hRight = dist(q.tr, q.br);
+    final outW = ((wTop + wBot) / 2).round().clamp(1, 10000);
+    final outH = ((hLeft + hRight) / 2).round().clamp(1, 10000);
+
+    srcPts = cv.VecPoint.fromList([
+      cv.Point(q.tl.x.round(), q.tl.y.round()),
+      cv.Point(q.tr.x.round(), q.tr.y.round()),
+      cv.Point(q.br.x.round(), q.br.y.round()),
+      cv.Point(q.bl.x.round(), q.bl.y.round()),
+    ]);
+    dstPts = cv.VecPoint.fromList([
+      cv.Point(0, 0),
+      cv.Point(outW - 1, 0),
+      cv.Point(outW - 1, outH - 1),
+      cv.Point(0, outH - 1),
+    ]);
+    m = cv.getPerspectiveTransform(srcPts, dstPts);
+    out = cv.warpPerspective(src, m, (outW, outH));
+    final (ok, bytes) = cv.imencode('.jpg', out);
+    if (!ok) return null;
+    File(outPath).writeAsBytesSync(bytes);
+    return outPath;
+  } catch (_) {
+    return null;
+  } finally {
+    src?.dispose();
+    m?.dispose();
+    out?.dispose();
+    srcPts?.dispose();
+    dstPts?.dispose();
+  }
+}

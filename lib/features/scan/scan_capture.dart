@@ -213,46 +213,59 @@ Future<List<String>> _captureWithCustomCamera(
   BuildContext context,
   int noOfPages,
 ) async {
-  final paths = <String>[];
   final batch = noOfPages != 1;
-  while (true) {
-    final shot = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
-    );
-    if (shot == null) break; // user backed out of the camera
-    if (!context.mounted) break;
 
-    // Full-resolution re-detection + confidence-gated auto-crop. When the
-    // still is confidently a document we crop + perspective-correct it
-    // automatically and SKIP the manual editor (CamScanner-style). Only
-    // medium/low confidence falls through to the editor for adjustment.
-    final dir = await getTemporaryDirectory();
-    final outPath = p.join(
-      dir.path,
-      'autocrop_${DateTime.now().millisecondsSinceEpoch}.jpg',
+  if (batch) {
+    // Continuous capture: the camera stays open and returns ALL raw pages at
+    // once (no bounce back to the dashboard between pages). Each page is then
+    // auto-cropped; low-confidence ones open the editor.
+    final shots = await Navigator.of(context).push<List<String>>(
+      MaterialPageRoute(builder: (_) => const CameraScannerScreen(batch: true)),
     );
-    final result = await compute(autoDetectAndCrop, <String, dynamic>{
-      'srcPath': shot,
-      'outPath': outPath,
-    });
-    final confidence = (result['confidence'] as num).toDouble();
-    final autoPath = result['path'] as String;
-
-    if (confidence >= kHighConfidence && result['cropped'] == true) {
-      paths.add(autoPath); // trust the auto-crop, no editor
-    } else {
+    if (shots == null || shots.isEmpty) return [];
+    final paths = <String>[];
+    for (final shot in shots) {
       if (!context.mounted) break;
-      // Editor opens on the auto-cropped result when we had one (medium
-      // confidence), else the raw shot — it auto-detects corners either way.
-      final seed = result['cropped'] == true ? autoPath : shot;
-      final cropped = await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: seed)),
-      );
-      paths.add(cropped ?? seed);
+      final done = await _autoCropOrEdit(context, shot);
+      paths.add(done);
     }
-    if (!batch || !context.mounted) break;
+    return paths;
   }
-  return paths;
+
+  // Single page.
+  final shot = await Navigator.of(context).push<String>(
+    MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
+  );
+  if (shot == null || !context.mounted) return [];
+  return [await _autoCropOrEdit(context, shot)];
+}
+
+/// Full-resolution re-detection + confidence-gated auto-crop for one captured
+/// page. High confidence → auto-crop + perspective-correct, skip the editor.
+/// Medium/low → open the crop editor (which auto-detects). Returns the final
+/// page path (never fails a page — falls back to the raw/auto path).
+Future<String> _autoCropOrEdit(BuildContext context, String shot) async {
+  final dir = await getTemporaryDirectory();
+  final outPath = p.join(
+    dir.path,
+    'autocrop_${DateTime.now().microsecondsSinceEpoch}.jpg',
+  );
+  final result = await compute(autoDetectAndCrop, <String, dynamic>{
+    'srcPath': shot,
+    'outPath': outPath,
+  });
+  final confidence = (result['confidence'] as num).toDouble();
+  final autoPath = result['path'] as String;
+
+  if (confidence >= kHighConfidence && result['cropped'] == true) {
+    return autoPath; // trust the auto-crop, no editor
+  }
+  if (!context.mounted) return autoPath;
+  final seed = result['cropped'] == true ? autoPath : shot;
+  final cropped = await Navigator.of(context).push<String>(
+    MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: seed)),
+  );
+  return cropped ?? seed;
 }
 
 void _showSkippedImages(BuildContext context, int count) {

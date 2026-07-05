@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 
 import '../../core/l10n/app_localizations.dart';
 import 'camera_frame_utils.dart';
+import 'crop_processor.dart';
 import 'document_detector.dart';
+import 'document_detector_cv.dart';
 
 /// A custom document camera used as the fallback when the native ML Kit /
 /// VisionKit scanner is unavailable (missing Google Play services), replacing
@@ -23,7 +26,13 @@ import 'document_detector.dart';
 /// the crop editor, which auto-detects corners and does perspective
 /// correction), or null if the user backs out.
 class CameraScannerScreen extends StatefulWidget {
-  const CameraScannerScreen({super.key});
+  const CameraScannerScreen({super.key, this.batch = false});
+
+  /// When true, the camera stays open after each shot and collects multiple
+  /// pages (continuous scanning — no bounce back to the dashboard between
+  /// pages). It then pops with a `List<String>` of captured paths. When false
+  /// it pops with a single `String` path after one shot.
+  final bool batch;
 
   @override
   State<CameraScannerScreen> createState() => _CameraScannerScreenState();
@@ -52,6 +61,9 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   /// Auto-capture: how long the document has been detected & stable.
   DateTime? _stableSince;
   bool _autoCapture = true;
+
+  /// Pages captured so far in batch mode (paths).
+  final List<String> _captured = [];
 
   @override
   void initState() {
@@ -116,15 +128,26 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     // are not sendable to another isolate.)
     try {
       final gray = grayscaleFromCameraImage(frame);
-      DocDetection? det;
+      Quad? quad;
+      double conf = 0;
       if (gray != null) {
-        det = detectDocument(gray);
+        // Prefer OpenCV (accurate, no Play services). Encode the small
+        // grayscale to PNG and detect; fall back to the pure-Dart detector.
+        final cvHit = detectDocumentCvBytes(img.encodePng(gray));
+        if (cvHit != null) {
+          quad = cvHit.quad;
+          conf = cvHit.confidence;
+        } else {
+          final d = detectDocument(gray);
+          quad = d?.quad;
+          conf = d?.confidence ?? 0;
+        }
       }
       if (!mounted) {
         _detecting = false;
         return;
       }
-      if (det == null) {
+      if (quad == null) {
         // No confident document — clear the border and reset stability.
         _history.clear();
         _stableSince = null;
@@ -133,16 +156,16 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
         final gw = gray!.width.toDouble();
         final gh = gray.height.toDouble();
         final raw = [
-          Offset(det.quad.tl.x / gw, det.quad.tl.y / gh),
-          Offset(det.quad.tr.x / gw, det.quad.tr.y / gh),
-          Offset(det.quad.br.x / gw, det.quad.br.y / gh),
-          Offset(det.quad.bl.x / gw, det.quad.bl.y / gh),
+          Offset(quad.tl.x / gw, quad.tl.y / gh),
+          Offset(quad.tr.x / gw, quad.tr.y / gh),
+          Offset(quad.br.x / gw, quad.br.y / gh),
+          Offset(quad.bl.x / gw, quad.bl.y / gh),
         ];
         final smoothed = _smooth(raw);
         _trackStability(smoothed);
         setState(() {
           _quadNorm = smoothed;
-          _confidence = det!.confidence;
+          _confidence = conf;
         });
         _maybeAutoCapture();
       }
@@ -206,10 +229,28 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
       }
       final file = await controller.takePicture();
       if (!mounted) return;
-      Navigator.of(context).pop(file.path);
+      if (widget.batch) {
+        // Continuous mode: keep the camera open, collect the page, resume the
+        // live detection stream for the next shot.
+        _captured.add(file.path);
+        _quadNorm = null;
+        _history.clear();
+        _stableSince = null;
+        if (!_usingFront) {
+          await controller.startImageStream(_onFrame);
+        }
+        if (mounted) setState(() => _busy = false);
+      } else {
+        Navigator.of(context).pop(file.path);
+      }
     } catch (_) {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Finish a batch session — pop with all captured page paths.
+  void _finishBatch() {
+    Navigator.of(context).pop(List<String>.from(_captured));
   }
 
   Future<void> _toggleFlash() async {
@@ -336,32 +377,64 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
                   ],
                 ),
               ),
-              // Capture button.
+              // Capture button (+ batch page counter and Done).
               Positioned(
                 bottom: MediaQuery.of(context).padding.bottom + 28,
                 left: 0,
                 right: 0,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: _busy ? null : _capture,
-                    child: Container(
-                      width: 74,
-                      height: 74,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                        border: Border.all(
-                            color: const Color(0xFF3DDC84), width: 5),
-                      ),
-                      child: _busy
-                          ? const Padding(
-                              padding: EdgeInsets.all(20),
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    // Batch page count (left).
+                    SizedBox(
+                      width: 72,
+                      child: widget.batch && _captured.isNotEmpty
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.photo_library,
+                                    color: Colors.white),
+                                Text('${_captured.length}',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold)),
+                              ],
                             )
-                          : const Icon(Icons.camera_alt, color: Colors.black),
+                          : null,
                     ),
-                  ),
+                    GestureDetector(
+                      onTap: _busy ? null : _capture,
+                      child: Container(
+                        width: 74,
+                        height: 74,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(
+                              color: const Color(0xFF3DDC84), width: 5),
+                        ),
+                        child: _busy
+                            ? const Padding(
+                                padding: EdgeInsets.all(20),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 3),
+                              )
+                            : const Icon(Icons.camera_alt, color: Colors.black),
+                      ),
+                    ),
+                    // Done (right) — finish a batch session.
+                    SizedBox(
+                      width: 72,
+                      child: widget.batch && _captured.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.check_circle,
+                                  color: Color(0xFF3DDC84), size: 44),
+                              tooltip: l10n.scanDone,
+                              onPressed: _busy ? null : _finishBatch,
+                            )
+                          : null,
+                    ),
+                  ],
                 ),
               ),
             ],

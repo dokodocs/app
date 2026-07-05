@@ -68,11 +68,15 @@ Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
     grow(q.br, mx, my),
     grow(q.bl, -mx, my),
   );
-  rectifyDocument(CropRequest(
-    srcPath: srcPath,
-    corners: expanded.toList(),
-    outPath: outPath,
-  ).toMap());
+  // Prefer OpenCV warpPerspective; fall back to the pure-Dart bilinear warp.
+  final warped = warpQuadCv(srcPath, expanded.toList(), outPath);
+  if (warped == null) {
+    rectifyDocument(CropRequest(
+      srcPath: srcPath,
+      corners: expanded.toList(),
+      outPath: outPath,
+    ).toMap());
+  }
   return {'path': outPath, 'confidence': det.confidence, 'cropped': true};
 }
 

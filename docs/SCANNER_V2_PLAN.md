@@ -175,8 +175,17 @@ the default until V2 is verified on-device.
   detection with corner ordering + confidence, wired as the PRIMARY detector
   for the crop-editor auto-seed and the post-capture auto-crop (Dart detector
   kept as graceful fallback). Works with no Google Play services.
-- **Next:** V2.2 (OpenCV live overlay on camera frames), V2.3 (OpenCV
-  `warpPerspective` crop), V2.5 (continuous multi-shot).
+- **V2.2 done:** live camera overlay now detects with OpenCV per frame
+  (small grayscale → PNG → `detectDocumentCvBytes`), Dart detector as
+  fallback; confidence-coloured smoothed border + auto-capture unchanged.
+- **V2.3 done:** post-capture crop uses OpenCV `warpPerspective`
+  (`warpQuadCv`), falling back to the pure-Dart bilinear warp.
+- **V2.5 done:** continuous multi-shot — `CameraScannerScreen(batch: true)`
+  keeps the camera open, shows a page counter + Done button, returns all
+  pages at once (no dashboard bounce between pages); each is then
+  auto-cropped/edited.
+- **Next (optional):** OpenCV enhancement modes (CLAHE/adaptive threshold),
+  iOS on-device validation, OCR phase.
 
 ## Immediate next step (if approved)
 
