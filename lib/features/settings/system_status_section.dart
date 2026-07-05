@@ -30,9 +30,18 @@ class _SystemStatusSectionState extends State<SystemStatusSection> {
   }
 
   Future<void> _refresh() async {
-    final cam = await Permission.camera.status;
+    _Status result;
+    try {
+      final cam = await Permission.camera.status;
+      result = cam.isGranted ? _Status.ok : _Status.warn;
+    } catch (_) {
+      // The permission plugin is unavailable (e.g. in a widget test with no
+      // platform channel, or a misbehaving host) — degrade to "unknown"
+      // rather than letting the async exception crash the Settings screen.
+      result = _Status.unknown;
+    }
     if (!mounted) return;
-    setState(() => _camera = cam.isGranted ? _Status.ok : _Status.warn);
+    setState(() => _camera = result);
   }
 
   Future<void> _testScanner() async {
