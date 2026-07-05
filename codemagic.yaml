@@ -9,11 +9,42 @@
 #                        use it to confirm the iOS build compiles.
 #   2. ios-testflight — builds a signed .ipa and uploads to TestFlight.
 #                        Requires the setup in the comments under that workflow.
+#
+# -----------------------------------------------------------------------------
+# ALTERNATIVE (no Codemagic, no $99): free Apple ID + USB — run ON A MAC.
+# Codemagic cannot USB-connect to your phone; this route needs a physical Mac
+# with your iPhone plugged in. Costs $0 in fees. Caveats: the signing cert
+# expires after 7 days (re-run to refresh), max ~3 apps, and Sign in with Apple
+# does NOT work on a free "Personal Team" (test in Guest mode instead).
+#
+#   # one-time, on the Mac:
+#   #  - install Xcode from the App Store, then: sudo xcodebuild -license accept
+#   #  - flutter doctor   (confirm Xcode ✓)
+#   git clone https://github.com/dokodocs/app.git && cd app
+#   flutter pub get
+#   dart run build_runner build --delete-conflicting-outputs
+#   (cd ios && pod install)
+#   #  - open ios/Runner.xcworkspace in Xcode
+#   #  - Xcode > Settings > Accounts > + > sign in with a free Apple ID
+#   #  - Runner target > Signing & Capabilities:
+#   #      * check "Automatically manage signing"
+#   #      * Team = your name (Personal Team)
+#   #      * Bundle Identifier = com.YOURNAME.dokodocs   (must be globally unique)
+#   #      * remove the "Sign in with Apple" capability for local testing
+#   #  - plug in iPhone, enable Developer Mode (Settings > Privacy & Security)
+#   flutter devices           # confirm the iPhone is listed
+#   flutter run --release     # builds, installs, launches on the device
+#   #  - first launch: iPhone > Settings > General > VPN & Device Management
+#   #    > tap your Apple ID > Trust, then relaunch.
+# -----------------------------------------------------------------------------
 
 workflows:
   ios-unsigned:
     name: iOS (unsigned sanity build)
-    instance_type: mac_mini_m2
+    # Free-tier machine: draws from Codemagic's 500 free macOS build
+    # minutes/month. (mac_mini_m2 is a paid instance and does NOT use free
+    # minutes — switch to it only if you upgrade for faster builds.)
+    instance_type: mac_mini_m1
     max_build_duration: 60
     environment:
       flutter: stable
@@ -35,7 +66,8 @@ workflows:
 
   ios-testflight:
     name: iOS (signed → TestFlight)
-    instance_type: mac_mini_m2
+    # Free-tier machine (see note in ios-unsigned above).
+    instance_type: mac_mini_m1
     max_build_duration: 90
     # ---------------------------------------------------------------------
     # ONE-TIME SETUP (in the Codemagic UI, not in this file):
