@@ -1,0 +1,88 @@
+# Codemagic CI/CD — cloud macOS builds for DokoDocs.
+#
+# Why this file exists: the iOS SDK (Xcode) is macOS-only, and the primary
+# dev machine is Windows. Codemagic runs the build on a hosted Mac so iOS can
+# be built, signed, and shipped to TestFlight without owning a Mac.
+#
+# Two workflows:
+#   1. ios-unsigned   — builds a no-codesign .app. Works with zero setup;
+#                        use it to confirm the iOS build compiles.
+#   2. ios-testflight — builds a signed .ipa and uploads to TestFlight.
+#                        Requires the setup in the comments under that workflow.
+
+workflows:
+  ios-unsigned:
+    name: iOS (unsigned sanity build)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Generate code (drift, l10n)
+        script: dart run build_runner build --delete-conflicting-outputs
+      - name: Analyze
+        script: flutter analyze
+      - name: Run tests
+        script: flutter test
+      - name: Build iOS (no codesign)
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/iphoneos/*.app
+
+  ios-testflight:
+    name: iOS (signed → TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    # ---------------------------------------------------------------------
+    # ONE-TIME SETUP (in the Codemagic UI, not in this file):
+    #
+    # 1. App Store Connect API key:
+    #    Codemagic → Teams → Integrations → App Store Connect → add a key.
+    #    Reference its name below in `app_store_connect.auth: integration`.
+    #
+    # 2. iOS code signing:
+    #    Codemagic → your app → Settings → Code signing identities. Upload
+    #    (or let Codemagic fetch) an Apple Distribution certificate + an
+    #    App Store provisioning profile for bundle id com.dokodocs.dokodocs.
+    #    Enable the "Sign in with Apple" capability on that App ID first
+    #    (the app ships the com.apple.developer.applesignin entitlement).
+    #
+    # 3. Create the app record com.dokodocs.dokodocs in App Store Connect.
+    #
+    # 4. Replace APP_STORE_CONNECT_KEY_ID below with your integration name.
+    # ---------------------------------------------------------------------
+    integrations:
+      app_store_connect: APP_STORE_CONNECT_KEY_ID
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.dokodocs.dokodocs
+    scripts:
+      - name: Flutter pub get
+        script: flutter pub get
+      - name: Generate code (drift, l10n)
+        script: dart run build_runner build --delete-conflicting-outputs
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Analyze
+        script: flutter analyze
+      - name: Run tests
+        script: flutter test
+      - name: Build signed IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
