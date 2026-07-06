@@ -205,3 +205,45 @@ foundation.
 Sources: opencv_dart real-time edge detection guide
 (medium.com/@kishansakariya0000), Dynamsoft/Scanbot offline Flutter scanner
 techblogs, Flutter Gems document-scanner list.
+
+---
+
+## Reference review — SwiftCamScanner (iOS)
+
+Repo: https://github.com/Srinija/SwiftCamScanner (Swift/UIKit CocoaPods pod,
+MIT, min iOS 8).
+
+**What it is:** a native iOS pod that (1) uses **OpenCV** to auto-detect
+document edges + apply perspective correction, then (2) shows an interactive
+**CropView** for the user to refine corners. Core API: `setUpImage()` →
+`cropAndTransform()`.
+
+**Can we use it directly? No — and we don't need to:**
+- It's a **Swift/UIKit pod, iOS-only**. Adopting it would require a Flutter↔
+  Swift platform channel and would still leave Android uncovered — the exact
+  fragmentation V2 exists to avoid.
+- It's **old** (min iOS 8, Storyboard-era UIKit, last meaningfully updated years
+  ago) and its OpenCV is vendored separately — a maintenance and binary-size
+  liability on top of our existing `dartcv4`.
+- Its whole value — **OpenCV edge detect → perspective correct → manual crop
+  refine** — is *already* what our cross-platform `dartcv4` pipeline does
+  (`document_detector_cv.dart` + `crop_editor_screen.dart`), and ours runs
+  identically on Android **and** iOS from one codebase.
+
+**What it confirms / what we learn:**
+- ✅ **Architecture validation.** Its two-stage flow (auto OpenCV correct →
+  user-guided crop) is exactly our design. An independent iOS scanner arriving
+  at the same shape is a good sign we're on the right track.
+- ✅ **iOS + OpenCV is proven.** It demonstrates OpenCV-based scanning works
+  well natively on iOS — reassurance that our `dartcv4` (same OpenCV core via
+  FFI) is the right iOS path, so we do **not** need VisionKit there either.
+- 📌 **Idea to borrow (not code):** its explicit, always-available manual
+  CropView refine step. We already have `CropEditorScreen`; the takeaway is to
+  keep manual refine one tap away on *every* capture, not only low-confidence
+  ones — a small UX tweak, no dependency.
+
+**Decision:** do **not** add SwiftCamScanner. Keep the single cross-platform
+`dartcv4` pipeline; treat SwiftCamScanner purely as design validation for the
+iOS side. iOS still needs on-device validation of our own pipeline (dartcv4
+pod build + camera BGRA stream) — that remains the open iOS risk, unchanged by
+this review.
