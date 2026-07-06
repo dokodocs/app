@@ -12,7 +12,6 @@ import 'camera_scanner_screen.dart';
 import 'crop_editor_screen.dart';
 import 'document_builder.dart';
 import 'filter_preview.dart';
-import 'ocr_service.dart';
 import 'providers/scan_session_provider.dart';
 import 'widgets/filter_picker.dart';
 
@@ -119,10 +118,6 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
           await ref.read(documentsRepositoryProvider).getById(id),
       ];
 
-      // OCR (V2.7): recognise text in the background and store it so scans are
-      // searchable by content. Fire-and-forget — never blocks save/UX.
-      _runOcrInBackground(documentIds);
-
       ref.read(scanSessionProvider.notifier).clear();
       if (!mounted) return;
 
@@ -139,26 +134,6 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  /// Recognises text for each saved document in the background (V2.7) and
-  /// stores it via `updateOcrText`, so search matches scan CONTENTS, not just
-  /// titles. Fire-and-forget: captures the repositories up front so it keeps
-  /// running after this screen is popped, and never surfaces errors.
-  void _runOcrInBackground(List<int> documentIds) {
-    final docsRepo = ref.read(documentsRepositoryProvider);
-    final pagesRepo = ref.read(pagesRepositoryProvider);
-    const ocr = OcrService();
-    Future(() async {
-      for (final id in documentIds) {
-        try {
-          final docPages = await pagesRepo.getForDocument(id);
-          final paths = [for (final p in docPages) p.localImagePath];
-          final text = await ocr.recognizePages(paths);
-          if (text.isNotEmpty) await docsRepo.updateOcrText(id, text);
-        } catch (_) {/* OCR is best-effort */}
-      }
-    });
   }
 
   /// After a successful save, offer to Open the new document, Share it, or
