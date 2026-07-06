@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:image/image.dart' as img;
 
+import '../../core/perf/scan_perf.dart';
 import 'crop_processor.dart';
 import 'document_detector_cv.dart';
 
@@ -24,8 +25,12 @@ List<double>? detectQuadInFile(String path) {
 /// Confidence thresholds shared by the capture flow (mirrors the spec):
 /// ≥ high → auto-crop and skip the editor; ≥ medium → auto-crop but open the
 /// editor for optional tweaks; below → open the editor for manual correction.
-const kHighConfidence = 0.80;
-const kMediumConfidence = 0.70;
+/// Recalibrated for the V3 scored-candidate detector: confidence is now an
+/// HONEST document-ness score (edge support + rectangularity + brightness +
+/// uniformity + area), not the old 0.35-floor formula that rated keyboards
+/// 75–88%. A clean page in fair light scores ~0.6–0.9; clutter scores <0.5.
+const kHighConfidence = 0.65;
+const kMediumConfidence = 0.50;
 
 /// Isolate-safe full-resolution re-detection + confidence-gated auto-crop.
 ///
@@ -38,46 +43,74 @@ const kMediumConfidence = 0.70;
 Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
   final srcPath = args['srcPath'] as String;
   final outPath = args['outPath'] as String;
-  final bytes = File(srcPath).readAsBytesSync();
-  final image = img.decodeImage(bytes);
+  final bytes =
+      ScanPerf.time('page.read', () => File(srcPath).readAsBytesSync());
+
+  // NATIVE-FIRST — no pure-Dart 12 MP decode. The old flow started with
+  // `img.decodeImage(bytes)` (~20–30 s per page on a budget phone: the
+  // ">4 minutes to save 3 pages" complaint) even when OpenCV then did all
+  // the real work. Now: native detect → native dims → native warp; the
+  // Dart decode happens ONLY on the no-natives fallback path.
+  final cvHit =
+      ScanPerf.time('page.detectCv', () => detectDocumentCvBytes(bytes));
+  if (cvHit != null) {
+    if (cvHit.confidence < kMediumConfidence) {
+      return {'path': srcPath, 'confidence': cvHit.confidence, 'cropped': false};
+    }
+    final dims = ScanPerf.time('page.dimsCv', () => imageDimsCv(bytes));
+    if (dims != null) {
+      final expanded =
+          _expandQuad(cvHit.quad, dims.width, dims.height);
+      final warped = ScanPerf.time(
+          'page.warpCv', () => warpQuadCv(srcPath, expanded.toList(), outPath));
+      if (warped != null) {
+        return {
+          'path': outPath,
+          'confidence': cvHit.confidence,
+          'cropped': true,
+        };
+      }
+    }
+    // Native warp failed → fall through to the Dart pipeline below.
+  }
+
+  // PURE-DART FALLBACK (OpenCV unavailable/failed): decode + weak detector +
+  // bilinear warp — slow, but only ever runs when the natives are missing.
+  final image = ScanPerf.time('page.decode', () => img.decodeImage(bytes));
   if (image == null) {
     return {'path': srcPath, 'confidence': 0.0, 'cropped': false};
   }
-  // Prefer OpenCV detection (V2); fall back to the pure-Dart detector.
-  final cvHit = detectDocumentCvBytes(bytes);
-  final quad = cvHit?.quad ?? detectDocument(image)?.quad;
-  final confidence =
-      cvHit?.confidence ?? detectDocument(image)?.confidence ?? 0.0;
+  final dartHit = detectDocument(image);
+  final quad = cvHit?.quad ?? dartHit?.quad;
+  final confidence = cvHit?.confidence ?? dartHit?.confidence ?? 0.0;
   if (quad == null || confidence < kMediumConfidence) {
     return {'path': srcPath, 'confidence': confidence, 'cropped': false};
   }
-  final det = (quad: quad, confidence: confidence);
-  // Expand the quad outward by ~2.5% of the frame per side (clamped) so text /
-  // stamps near the edge are never clipped.
-  final mx = image.width * 0.025;
-  final my = image.height * 0.025;
+  final expanded = _expandQuad(quad, image.width, image.height);
+  rectifyDocument(CropRequest(
+    srcPath: srcPath,
+    corners: expanded.toList(),
+    outPath: outPath,
+  ).toMap());
+  return {'path': outPath, 'confidence': confidence, 'cropped': true};
+}
+
+/// Expands [q] outward by ~2.5% of the frame per side (clamped) so text /
+/// stamps near the edge are never clipped.
+Quad _expandQuad(Quad q, int width, int height) {
+  final mx = width * 0.025;
+  final my = height * 0.025;
   ({double x, double y}) grow(({double x, double y}) p, double dx, double dy) =>
       (
-        x: (p.x + dx).clamp(0, image.width - 1).toDouble(),
-        y: (p.y + dy).clamp(0, image.height - 1).toDouble(),
+        x: (p.x + dx).clamp(0, width - 1).toDouble(),
+        y: (p.y + dy).clamp(0, height - 1).toDouble(),
       );
-  final q = det.quad;
-  final expanded = Quad(
+  return Quad(
     grow(q.tl, -mx, -my),
     grow(q.tr, mx, -my),
     grow(q.br, mx, my),
     grow(q.bl, -mx, my),
   );
-  // Prefer OpenCV warpPerspective; fall back to the pure-Dart bilinear warp.
-  final warped = warpQuadCv(srcPath, expanded.toList(), outPath);
-  if (warped == null) {
-    rectifyDocument(CropRequest(
-      srcPath: srcPath,
-      corners: expanded.toList(),
-      outPath: outPath,
-    ).toMap());
-  }
-  return {'path': outPath, 'confidence': det.confidence, 'cropped': true};
 }
 
 /// Lightweight, dependency-free document-quad detector.

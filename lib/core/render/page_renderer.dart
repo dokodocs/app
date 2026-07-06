@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
+import '../perf/scan_perf.dart';
 import 'image_enhancer.dart';
 import 'image_enhancer_cv.dart';
 
@@ -90,11 +91,58 @@ class _RenderArgs {
   final int jpegQuality;
 }
 
-Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
+Future<RenderedPage> _renderPageIsolate(_RenderArgs args) =>
+    ScanPerf.timeAsync('render.total', () => _renderPageBody(args));
+
+Future<RenderedPage> _renderPageBody(_RenderArgs args) async {
+  // FAST PATH (V3 save-speed fix): fully-native OpenCV render — decode,
+  // resize, filter, rotate, watermark, encode all in native code. The
+  // pure-Dart pipeline below (which decoded a 12 MP capture in Dart) took
+  // ~20 s/page on budget phones — ">2 minutes to save 5 images". Falls
+  // through to pure Dart for legacy filters or any native failure.
+  final fast = args.outputFormat == 'png'
+      ? null // native path writes JPEG only; PNG exports use the Dart path
+      : ScanPerf.time(
+      'render.cvFast',
+      () => renderDocumentCv(
+            srcPath: args.originalPath,
+            destPath: args.destPath,
+            filter: args.filter,
+            rotationDegrees: args.rotationDegrees,
+            watermark: args.watermark,
+            watermarkPosition: args.watermarkPosition,
+          ));
+  if (fast != null) {
+    return RenderedPage(
+      path: args.destPath,
+      width: fast.width,
+      height: fast.height,
+    );
+  }
+  return _renderPageDart(args);
+}
+
+Future<RenderedPage> _renderPageDart(_RenderArgs args) async {
   final bytes = await File(args.originalPath).readAsBytes();
-  var image = img.decodeImage(bytes);
+  var image = ScanPerf.time('render.decode', () => img.decodeImage(bytes));
   if (image == null) {
     throw StateError('Could not decode image at ${args.originalPath}');
+  }
+
+  // Cap working resolution BEFORE the (pure-Dart) filter + JPEG encode. A 12 MP
+  // camera capture is far larger than a document needs, and pure-Dart decode/
+  // filter/encode cost scales with pixel count — the main reason saves felt
+  // slow on the plain-filter and 'original' paths. ~2600 px long edge ≈ 216 DPI
+  // on A4 with no visible quality loss, and mirrors the cap enhanceBytesCv
+  // already applies for the OpenCV scan modes so every path is bounded.
+  const maxRenderLongEdge = 2600;
+  final longEdge = image.width > image.height ? image.width : image.height;
+  if (longEdge > maxRenderLongEdge) {
+    image = img.copyResize(
+      image,
+      width: image.width >= image.height ? maxRenderLongEdge : null,
+      height: image.height > image.width ? maxRenderLongEdge : null,
+    );
   }
 
   switch (args.filter) {
@@ -143,9 +191,12 @@ Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
     _drawCornerWatermark(image, args.watermarkPosition, args.watermarkLogo);
   }
 
-  final encoded = args.outputFormat == 'png'
-      ? img.encodePng(image)
-      : img.encodeJpg(image, quality: args.jpegQuality);
+  final finalImage = image;
+  final encoded = ScanPerf.time(
+      'render.encode',
+      () => args.outputFormat == 'png'
+          ? img.encodePng(finalImage)
+          : img.encodeJpg(finalImage, quality: args.jpegQuality));
   await File(args.destPath).writeAsBytes(encoded);
   // Return the FINAL dimensions (post-rotation) so the PDF builder can size
   // pages without decoding the image a second time.
@@ -161,12 +212,15 @@ Future<RenderedPage> _renderPageIsolate(_RenderArgs args) async {
 /// OpenCV fails. [srcBytes] are the original encoded bytes; [decoded] is the
 /// already-decoded image used for the fallback path.
 img.Image _enhance(img.Image decoded, Uint8List srcBytes, ScanMode mode) {
-  final cvBytes = enhanceBytesCv(srcBytes, mode);
+  final cvBytes =
+      ScanPerf.time('render.enhanceCv', () => enhanceBytesCv(srcBytes, mode));
   if (cvBytes != null) {
-    final cvImage = img.decodeImage(cvBytes);
+    final cvImage =
+        ScanPerf.time('render.redecodeCv', () => img.decodeImage(cvBytes));
     if (cvImage != null) return cvImage;
   }
-  return enhanceDocument(decoded, mode);
+  return ScanPerf.time(
+      'render.enhanceDart', () => enhanceDocument(decoded, mode));
 }
 
 /// The DokoDocs corner watermark: the doko logo mark next to the "dokodocs"

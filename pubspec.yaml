@@ -40,7 +40,10 @@ dependencies:
   intl: ^0.20.2
 
   # Scanner (V2): the app owns the whole vision pipeline — the `camera`
-  # package for full lens/resolution/stream control, and OpenCV (dartcv4) for
+  # package for full lens/resolution/stream control, and OpenCV (opencv_core —
+  # it BUNDLES the native libdartcv library; plain dartcv4 does NOT ship
+  # natives in a Flutter app, so every cv call failed at runtime and silently
+  # fell back to the weak pure-Dart paths) for
   # edge detection, quad finding and perspective warp. Works identically on
   # every Android + iOS device with NO Google Play services / ML Kit
   # dependency (ML Kit Document Scanner 16.0.0 NPEs on some devices, e.g.
@@ -82,7 +85,7 @@ dependencies:
   # only picks one image at a time; pickMultiImage() lets the user select
   # many photos at once to build a multi-page document.
   image_picker: ^1.2.3
-  dartcv4: ^1.1.8
+  opencv_core: ^1.4.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

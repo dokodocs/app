@@ -1,5 +1,68 @@
+import 'dart:typed_data';
+
 import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
+
+/// Raw grayscale pixels of a subsampled camera frame — the V3 zero-codec live
+/// path. Row-major, one byte per pixel.
+class GrayFrame {
+  const GrayFrame(this.bytes, this.width, this.height);
+  final Uint8List bytes;
+  final int width;
+  final int height;
+}
+
+/// Extracts a subsampled RAW grayscale buffer (~[targetWidth] px wide) from a
+/// live [CameraImage] with no image-package object and no codec — just a plain
+/// byte loop. YUV420 (Android): Y plane is already luminance. BGRA8888 (iOS):
+/// integer luma from B/G/R. Returns null for unsupported formats.
+GrayFrame? grayBytesFromCameraImage(CameraImage image, {int targetWidth = 500}) {
+  final srcW = image.width;
+  final srcH = image.height;
+  if (srcW == 0 || srcH == 0) return null;
+
+  final step = (srcW / targetWidth).floor().clamp(1, 64);
+  final outW = srcW ~/ step;
+  final outH = srcH ~/ step;
+  if (outW < 8 || outH < 8) return null;
+
+  final out = Uint8List(outW * outH);
+
+  switch (image.format.group) {
+    case ImageFormatGroup.yuv420:
+      final y = image.planes[0];
+      final rowStride = y.bytesPerRow;
+      final bytes = y.bytes;
+      var o = 0;
+      for (var oy = 0; oy < outH; oy++) {
+        final rowStart = oy * step * rowStride;
+        for (var ox = 0; ox < outW; ox++) {
+          out[o++] = bytes[rowStart + ox * step];
+        }
+      }
+      return GrayFrame(out, outW, outH);
+
+    case ImageFormatGroup.bgra8888:
+      final plane = image.planes[0];
+      final rowStride = plane.bytesPerRow;
+      final bytes = plane.bytes;
+      var o = 0;
+      for (var oy = 0; oy < outH; oy++) {
+        final rowStart = oy * step * rowStride;
+        for (var ox = 0; ox < outW; ox++) {
+          final i = rowStart + ox * step * 4;
+          final b = bytes[i];
+          final g = bytes[i + 1];
+          final r = bytes[i + 2];
+          out[o++] = (r * 30 + g * 59 + b * 11) ~/ 100;
+        }
+      }
+      return GrayFrame(out, outW, outH);
+
+    default:
+      return null;
+  }
+}
 
 /// Builds a small grayscale [img.Image] from a live [CameraImage], subsampled
 /// to about [targetWidth] px wide so document detection stays cheap enough to

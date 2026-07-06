@@ -13,6 +13,7 @@ import 'crop_editor_screen.dart';
 import 'document_builder.dart';
 import 'filter_preview.dart';
 import 'providers/scan_session_provider.dart';
+import 'scan_capture.dart' show autoCropSessionPagesInBackground;
 import 'widgets/filter_picker.dart';
 
 /// Multi-page tray: reorder / retake / delete / add-page / per-page filter,
@@ -36,28 +37,29 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
   bool _isSaving = false;
 
   Future<void> _addPage() async {
-    final captured = await _customCaptureAndCrop();
+    final captured = await _capturePage();
     if (captured == null) return;
     ref.read(scanSessionProvider.notifier).addPaths([captured]);
+    autoCropSessionPagesInBackground(ref, [captured]);
   }
 
   Future<void> _retakeSelected() async {
-    final captured = await _customCaptureAndCrop();
+    final captured = await _capturePage();
     if (captured == null) return;
     ref.read(scanSessionProvider.notifier).replaceAt(_selectedIndex, captured);
+    autoCropSessionPagesInBackground(ref, [captured]);
   }
 
-  /// OpenCV rear-camera capture + auto-crop editor, shared by add-page and
-  /// retake. Returns the corrected path, or null if the user backed out.
-  Future<String?> _customCaptureAndCrop() async {
+  /// OpenCV rear-camera capture, shared by add-page and retake. The
+  /// perspective crop runs in the BACKGROUND afterwards (no crop-editor
+  /// stop — client feedback); returns the raw shot path, or null if the
+  /// user backed out.
+  Future<String?> _capturePage() async {
     final shot = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
     );
     if (shot == null || !mounted) return null;
-    final cropped = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: shot)),
-    );
-    return cropped ?? shot;
+    return shot;
   }
 
   /// Opens the manual crop + perspective editor for the selected page and,
@@ -80,26 +82,50 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
   void _deleteSelected() {
     final pages = ref.read(scanSessionProvider);
     if (pages.isEmpty) return;
-    ref.read(scanSessionProvider.notifier).removeAt(_selectedIndex);
-    if (_selectedIndex >= pages.length - 1) {
-      setState(() => _selectedIndex = (pages.length - 2).clamp(0, 1 << 30));
+    // Clamp BEFORE removing (the stale index could already exceed the list
+    // after rapid deletes — the "error when deleting with multiple images"),
+    // and always land the selection inside the NEW length afterwards.
+    final idx = _selectedIndex.clamp(0, pages.length - 1);
+    ref.read(scanSessionProvider.notifier).removeAt(idx);
+    final newLength = pages.length - 1;
+    if (newLength <= 0) {
+      // Last page deleted — nothing left to review.
+      Navigator.of(context).pop();
+      return;
     }
+    setState(() => _selectedIndex = idx.clamp(0, newLength - 1));
   }
 
   Future<void> _save() async {
-    final pages = ref.read(scanSessionProvider);
-    if (pages.isEmpty || _isSaving) return;
+    if (ref.read(scanSessionProvider).isEmpty || _isSaving) return;
 
-    final format = await _chooseFormat(context);
-    if (format == null || !mounted) return; // user dismissed the chooser
-
-    final title = await _chooseName(context);
-    if (title == null || !mounted) return; // user cancelled the name prompt
+    // ONE-TAP SAVE (client feedback): no format chooser, no name prompt —
+    // PDF with an auto-generated name. Rename/re-export remain available
+    // from the document actions afterwards.
+    const format = ExportFormat.pdf;
+    final title = 'dokodocs_${DateTime.now().millisecondsSinceEpoch}';
 
     setState(() => _isSaving = true);
 
     final l10n = AppLocalizations.of(context);
     final settings = await ref.read(userSettingsRepositoryProvider).get();
+
+    // Phase 2 queue: wait for any BACKGROUND auto-crops still in flight so a
+    // fast Save never persists a raw, uncropped page. Bounded at 20 s — a
+    // stuck crop then saves whatever state the page is in rather than
+    // hanging the save forever.
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (ref.read(scanSessionProvider).any((p) => p.processing) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    if (!mounted) return;
+    // Re-read AFTER the wait — background crops swap page paths in place.
+    final pages = ref.read(scanSessionProvider);
+    if (pages.isEmpty) {
+      setState(() => _isSaving = false);
+      return;
+    }
 
     try {
       final documentIds = await saveScanSessionAsDocument(
@@ -201,74 +227,6 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
       ),
     );
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  /// Prompts for a document name, prefilled with `dokodocs_<epoch>` (the
-  /// millisecond timestamp). Returns null if the user cancels.
-  Future<String?> _chooseName(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final controller = TextEditingController(
-      text: 'dokodocs_${DateTime.now().millisecondsSinceEpoch}',
-    );
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.scanSaveNameTitle),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(labelText: l10n.scanSaveNameHint),
-          onSubmitted: (value) =>
-              Navigator.of(dialogContext).pop(value.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.dialogCancel),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text.trim()),
-            child: Text(l10n.dialogSave),
-          ),
-        ],
-      ),
-    ).then((value) => (value == null || value.isEmpty) ? null : value);
-  }
-
-  Future<ExportFormat?> _chooseFormat(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<ExportFormat>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(l10n.scanSaveAsTitle, style: Theme.of(context).textTheme.titleMedium),
-            ),
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined),
-              title: Text(l10n.scanSaveAsPdf),
-              subtitle: Text(l10n.scanSaveAsPdfBody),
-              onTap: () => Navigator.of(sheetContext).pop(ExportFormat.pdf),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image_outlined),
-              title: Text(l10n.scanSaveAsJpeg),
-              subtitle: Text(l10n.scanSaveAsImageBody),
-              onTap: () => Navigator.of(sheetContext).pop(ExportFormat.jpeg),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image_outlined),
-              title: Text(l10n.scanSaveAsPng),
-              subtitle: Text(l10n.scanSaveAsImageBody),
-              onTap: () => Navigator.of(sheetContext).pop(ExportFormat.png),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -398,12 +356,31 @@ class _ScanReviewScreenState extends ConsumerState<ScanReviewScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: filteredPreview(
-                        filter: page.filter,
-                        child: Image.file(
-                          File(page.imagePath),
-                          fit: BoxFit.cover,
-                        ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          filteredPreview(
+                            filter: page.filter,
+                            child: Image.file(
+                              File(page.imagePath),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          // Background auto-crop still running for this page.
+                          if (page.processing)
+                            Container(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              alignment: Alignment.center,
+                              child: const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),

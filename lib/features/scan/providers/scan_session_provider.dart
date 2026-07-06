@@ -46,9 +46,33 @@ class ScanSessionNotifier extends Notifier<List<ScanPage>> {
       // stays uniform (was 'original', which left retakes looking different).
       filter: kDefaultScanFilter,
       rotation: 0,
+      processing: false,
     );
     state = list;
   }
+
+  /// Swaps the page currently holding [oldPath] to [newPath] — used by the
+  /// BACKGROUND auto-crop: keyed by path (not index) so reorder/delete while
+  /// a page is still processing can never swap the wrong page. No-op if the
+  /// page was deleted meanwhile. Always clears the processing badge.
+  void replacePath(String oldPath, String newPath) {
+    final index = state.indexWhere((p) => p.imagePath == oldPath);
+    if (index < 0) return;
+    replaceAt(index, newPath);
+  }
+
+  /// Marks/unmarks the page holding [path] as background-processing (Phase 2
+  /// queue). No-op if the page was deleted meanwhile.
+  void setProcessing(String path, bool value) {
+    final index = state.indexWhere((p) => p.imagePath == path);
+    if (index < 0) return;
+    final list = [...state];
+    list[index] = list[index].copyWith(processing: value);
+    state = list;
+  }
+
+  /// True while any page's background crop is still running.
+  bool get anyProcessing => state.any((p) => p.processing);
 
   void setFilter(int index, String filter) {
     final list = [...state];

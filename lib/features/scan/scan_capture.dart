@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +10,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
+import '../editor/editor_screen.dart';
 import 'camera_scanner_screen.dart';
-import 'crop_editor_screen.dart';
+import 'document_builder.dart';
 import 'document_detector.dart';
 import 'image_normalizer.dart';
 import 'providers/scan_session_provider.dart';
@@ -142,11 +145,82 @@ Future<void> _runCapture(
 
   ref.read(scanIsBatchProvider.notifier).set(noOfPages != 1);
   ref.read(scanSessionProvider.notifier).addPaths(paths);
+  // Background crops start immediately; auto-save waits for them.
+  autoCropSessionPagesInBackground(ref, paths);
 
   if (!context.mounted) return;
+  // FULLY AUTOMATIC SAVE (client): no review stop, no save button — the
+  // captured pages save as a PDF right away and the PDF opens directly.
+  await autoSaveSessionAndOpen(context, ref, folderId: targetFolderId);
+}
+
+/// Waits for the background crops, saves the session as a PDF with an
+/// auto-generated name, clears the session, and opens the saved PDF in the
+/// editor — no dialogs, no review stop, no visible "saving" screen beyond a
+/// brief inline progress indicator.
+Future<void> autoSaveSessionAndOpen(
+  BuildContext context,
+  WidgetRef ref, {
+  int? folderId,
+}) async {
+  final l10n = AppLocalizations.of(context);
+  // Minimal progress while crops+save run (typically 1–3 s with the native
+  // pipeline). The dialog is closed via [closeDialog] on EVERY exit path —
+  // an early return that skipped the pop left the app "stuck saving"
+  // forever even though the file was already on disk.
+  var dialogClosed = false;
+  void closeDialog() {
+    if (dialogClosed || !context.mounted) return;
+    dialogClosed = true;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  unawaited(showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  ).then((_) => dialogClosed = true));
+
+  List<int>? documentIds;
+  try {
+    // Wait for background crops (bounded).
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (ref.read(scanSessionProvider).any((p) => p.processing) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    final pages = ref.read(scanSessionProvider);
+    if (pages.isNotEmpty) {
+      final settings = await ref.read(userSettingsRepositoryProvider).get();
+      documentIds = await saveScanSessionAsDocument(
+        pages: pages,
+        documentsRepository: ref.read(documentsRepositoryProvider),
+        pagesRepository: ref.read(pagesRepositoryProvider),
+        title: 'dokodocs_${DateTime.now().millisecondsSinceEpoch}',
+        format: ExportFormat.pdf,
+        folderId: folderId,
+        applyWatermark: true,
+        watermarkPosition: settings.watermarkPosition,
+      );
+      ref.read(scanSessionProvider.notifier).clear();
+    }
+  } catch (error) {
+    closeDialog();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.scanSaveFailed('$error'))),
+      );
+    }
+    return;
+  }
+
+  closeDialog();
+  if (documentIds == null || documentIds.isEmpty || !context.mounted) return;
+  final firstId = documentIds.first;
+  // Open the saved PDF directly.
   await Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) => ScanReviewScreen(folderId: targetFolderId),
+      builder: (_) => EditorScreen(documentId: firstId),
     ),
   );
 }
@@ -189,9 +263,11 @@ Future<ScanChoice?> _chooseScanMode(BuildContext context) {
 
 /// Drives the OpenCV [CameraScannerScreen] — the app's only camera scanner.
 /// Batch mode keeps the camera open across pages (continuous scanning) and
-/// returns all pages at once; single mode returns one. Each captured page is
-/// then auto-cropped + perspective-corrected; low-confidence pages open the
-/// crop editor. Returns the final page paths (empty if the user cancelled).
+/// returns all pages at once; single mode returns one. Returns the RAW shot
+/// paths immediately (empty if the user cancelled) — cropping happens in the
+/// BACKGROUND via [autoCropSessionPagesInBackground], not here, so the review
+/// screen opens instantly (client: capture → review with no crop-editor stop;
+/// "crop should be done in background").
 Future<List<String>> _captureWithCustomCamera(
   BuildContext context,
   int noOfPages,
@@ -204,48 +280,49 @@ Future<List<String>> _captureWithCustomCamera(
         builder: (_) => const CameraScannerScreen(batch: true),
       ),
     );
-    if (shots == null || shots.isEmpty) return [];
-    final paths = <String>[];
-    for (final shot in shots) {
-      if (!context.mounted) break;
-      paths.add(await _autoCropOrEdit(context, shot));
-    }
-    return paths;
+    return shots ?? [];
   }
 
   final shot = await Navigator.of(context).push<String>(
     MaterialPageRoute(builder: (_) => const CameraScannerScreen()),
   );
-  if (shot == null || !context.mounted) return [];
-  return [await _autoCropOrEdit(context, shot)];
+  return shot == null ? [] : [shot];
 }
 
-/// Full-resolution re-detection + confidence-gated auto-crop for one captured
-/// page. High confidence → auto-crop + perspective-correct, skip the editor.
-/// Medium/low → open the crop editor (which auto-detects). Returns the final
-/// page path (never fails a page — falls back to the raw/auto path).
-Future<String> _autoCropOrEdit(BuildContext context, String shot) async {
-  final dir = await getTemporaryDirectory();
-  final outPath = p.join(
-    dir.path,
-    'autocrop_${DateTime.now().microsecondsSinceEpoch}.jpg',
-  );
-  final result = await compute(autoDetectAndCrop, <String, dynamic>{
-    'srcPath': shot,
-    'outPath': outPath,
-  });
-  final confidence = (result['confidence'] as num).toDouble();
-  final autoPath = result['path'] as String;
-
-  if (confidence >= kHighConfidence && result['cropped'] == true) {
-    return autoPath; // trust the auto-crop, no editor
+/// Kicks a BACKGROUND full-resolution re-detect + perspective crop for each
+/// raw page in [paths]. Each page is processed off the UI thread and, when
+/// the detection is confident enough (≥ medium), the session page is swapped
+/// in-place — matched by PATH, so deleting/reordering pages while one is
+/// still processing can never touch the wrong page. Low-confidence pages
+/// stay raw; the user can still crop manually from the review screen.
+void autoCropSessionPagesInBackground(WidgetRef ref, List<String> paths) {
+  final session = ref.read(scanSessionProvider.notifier);
+  for (final shot in paths) {
+    session.setProcessing(shot, true);
+    unawaited(() async {
+      try {
+        final dir = await getTemporaryDirectory();
+        final outPath = p.join(
+          dir.path,
+          'autocrop_${DateTime.now().microsecondsSinceEpoch}_'
+          '${shot.hashCode.toRadixString(16)}.jpg',
+        );
+        final result = await compute(autoDetectAndCrop, <String, dynamic>{
+          'srcPath': shot,
+          'outPath': outPath,
+        });
+        if (result['cropped'] == true) {
+          // replacePath also clears the processing badge.
+          session.replacePath(shot, result['path'] as String);
+        } else {
+          session.setProcessing(shot, false);
+        }
+      } catch (_) {
+        // A failed crop leaves the raw page in place — never breaks review.
+        session.setProcessing(shot, false);
+      }
+    }());
   }
-  if (!context.mounted) return autoPath;
-  final seed = result['cropped'] == true ? autoPath : shot;
-  final cropped = await Navigator.of(context).push<String>(
-    MaterialPageRoute(builder: (_) => CropEditorScreen(imagePath: seed)),
-  );
-  return cropped ?? seed;
 }
 
 void _showSkippedImages(BuildContext context, int count) {

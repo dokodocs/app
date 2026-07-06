@@ -46,3 +46,8 @@ ios/.symlinks/
 
 # Coverage
 coverage/
+
+# Local detection-harness inputs (may contain personal documents) + outputs
+test/fixtures/detection/
+docs/detection_results/
+

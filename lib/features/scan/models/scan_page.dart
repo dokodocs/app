@@ -15,6 +15,7 @@ class ScanPage {
     this.rotation = 0,
     this.cropCoordinates,
     this.needsReview = false,
+    this.processing = false,
   });
 
   /// The immutable captured original.
@@ -30,6 +31,11 @@ class ScanPage {
   /// confidence was low — surfaced for review rather than silently guessed.
   final bool needsReview;
 
+  /// True while the BACKGROUND auto-crop (full-res re-detect + perspective
+  /// warp) is still running for this page. The review screen shows a badge
+  /// and Save waits until every page is done (Phase 2 queue).
+  final bool processing;
+
   bool get isReverted =>
       filter == 'original' &&
       rotation == 0 &&
@@ -42,6 +48,7 @@ class ScanPage {
     String? cropCoordinates,
     bool clearCrop = false,
     bool? needsReview,
+    bool? processing,
   }) {
     return ScanPage(
       imagePath: imagePath ?? this.imagePath,
@@ -50,6 +57,7 @@ class ScanPage {
       cropCoordinates:
           clearCrop ? null : (cropCoordinates ?? this.cropCoordinates),
       needsReview: needsReview ?? this.needsReview,
+      processing: processing ?? this.processing,
     );
   }
 }

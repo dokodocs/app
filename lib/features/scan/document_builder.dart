@@ -8,6 +8,7 @@ import '../../core/database/database.dart';
 import '../../core/database/repositories/documents_repository.dart';
 import '../../core/database/repositories/pages_repository.dart';
 import '../../core/pdf/pdf_builder.dart';
+import '../../core/perf/scan_perf.dart';
 import '../../core/render/page_renderer.dart';
 import '../../core/render/watermark_asset.dart';
 import 'models/scan_page.dart';
@@ -82,13 +83,16 @@ Future<List<int>> saveScanSessionAsDocument({
     );
 
     final pdfPath = p.join(docFolder.path, 'document.pdf');
-    await buildPdfFromSources(
-      pages: [
-        for (final r in rendered)
-          PdfPageSource(path: r.path, width: r.width, height: r.height),
-      ],
-      outputPath: pdfPath,
-    );
+    await ScanPerf.timeAsync(
+        'save.pdfBuild',
+        () => buildPdfFromSources(
+              pages: [
+                for (final r in rendered)
+                  PdfPageSource(
+                      path: r.path, width: r.width, height: r.height),
+              ],
+              outputPath: pdfPath,
+            ));
     final sizeBytes = await File(pdfPath).length();
     final now = DateTime.now();
 
@@ -191,8 +195,10 @@ Future<List<int>> saveScanSessionAsDocument({
 }
 
 /// Maximum number of page-render isolates to run at once. Kept small so N
-/// full-resolution decodes don't spike memory on the 2–3 GB Nepal target.
-const kMaxRenderConcurrency = 3;
+/// full-resolution decodes don't spike memory on the 2–3 GB Nepal target —
+/// each render holds a pure-Dart decode AND OpenCV working Mats at once, so
+/// 2 is the safe ceiling (3 produced save-time OOM crashes on-device).
+const kMaxRenderConcurrency = 2;
 
 /// Maps [items] through async [fn] with at most [kMaxRenderConcurrency]
 /// in-flight at a time, preserving input order in the result. Used to turn the

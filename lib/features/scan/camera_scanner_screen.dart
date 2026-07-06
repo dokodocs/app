@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
+import '../../core/cv/cv_worker.dart';
+import '../../core/flags.dart';
 import '../../core/l10n/app_localizations.dart';
+import '../../core/perf/scan_perf.dart';
 import 'camera_frame_utils.dart';
 import 'crop_processor.dart';
 import 'document_detector.dart';
@@ -43,6 +47,9 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   Future<void>? _initFuture;
+
+  /// V3: one long-lived OpenCV worker isolate for the whole camera session.
+  CvWorker? _cvWorker;
   List<CameraDescription> _cameras = const [];
   bool _usingFront = false;
   FlashMode _flash = FlashMode.off;
@@ -67,8 +74,26 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   static const _historyLen = 5;
 
   /// Auto-capture: how long the document has been detected & stable.
+  /// OFF by default (client feedback 2026-07-06): the user frames the shot,
+  /// checks the green outline and presses the shutter themselves — the
+  /// detected quad is then used for the automatic background crop.
   DateTime? _stableSince;
-  bool _autoCapture = true;
+  bool _autoCapture = false;
+
+  /// Consecutive frames whose raw quad stayed within ~2% drift of the
+  /// previous one. Auto-capture (and the "hold steady" state) require
+  /// [_kRequiredConsistentFrames] in a row — one lucky frame can't fire the
+  /// shutter on a wrong quad.
+  int _consistentFrames = 0;
+  static const _kRequiredConsistentFrames = 5;
+  List<Offset>? _lastRawQuad;
+
+  /// Tap-to-target: the user taps the object to scan (card, receipt, one
+  /// page of a stack) and detection locks onto candidates containing that
+  /// point. Expires after a few seconds of no re-tap.
+  Offset? _focusNorm;
+  DateTime? _focusAt;
+  static const _kFocusLifetime = Duration(seconds: 5);
 
   /// Pages captured so far in batch mode (paths).
   final List<String> _captured = [];
@@ -84,10 +109,14 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
+    _cvWorker?.dispose();
     super.dispose();
   }
 
   Future<void> _setup() async {
+    if (kUseScannerV3) {
+      _cvWorker = await CvWorker.spawn();
+    }
     _cameras = await availableCameras();
     await _start(front: false);
   }
@@ -108,7 +137,11 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     final desc = _pick(front: front);
     final controller = CameraController(
       desc,
-      ResolutionPreset.max, // high resolution for sharp scans
+      // ultraHigh (~3840 px long edge) is sharp for documents while staying
+      // well above the renderer's 2600 px cap — capturing at .max (up to
+      // 108 MP on some sensors) only produced huge files that were slow to
+      // copy, decode and encode at save time, with no visible quality gain.
+      ResolutionPreset.ultraHigh,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
@@ -125,6 +158,60 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   }
 
   Future<void> _onFrame(CameraImage frame) async {
+    if (kUseScannerV3) {
+      return _onFrameV3(frame);
+    }
+    return _onFrameLegacy(frame);
+  }
+
+  /// V3 hot path: raw grayscale bytes → long-lived cv_worker isolate. No PNG,
+  /// no per-frame isolate spawn, no wall-clock throttle — the worker's
+  /// latest-only mailbox paces detection to whatever the device sustains.
+  Future<void> _onFrameV3(CameraImage frame) async {
+    if (_busy) return;
+    final worker = _cvWorker;
+    if (worker == null || worker.isSaturated) return; // drop frame cheaply
+    final startMs = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final gf = ScanPerf.time('live.gray', () => grayBytesFromCameraImage(frame));
+      if (gf == null) return;
+      final rot = _controller?.description.sensorOrientation ?? 0;
+      // Tap-to-target focus, while fresh.
+      final focusFresh = _focusAt != null &&
+          DateTime.now().difference(_focusAt!) < _kFocusLifetime;
+      if (!focusFresh) _focusNorm = null;
+      final focus = focusFresh ? _focusNorm : null;
+      final hit = await worker.detect(
+        gf.bytes,
+        gf.width,
+        gf.height,
+        rotationDegrees: rot,
+        focusX: focus?.dx,
+        focusY: focus?.dy,
+      );
+      _framesProcessed++;
+      _lastDetectMs = DateTime.now().millisecondsSinceEpoch - startMs;
+      ScanPerf.lastMs['live.detectWorker'] = _lastDetectMs;
+      if (!mounted) return;
+      if (hit == null) {
+        _applyDetection(null, 0);
+      } else {
+        final w = hit.width.toDouble();
+        final h = hit.height.toDouble();
+        final c = hit.corners;
+        _applyDetection([
+          Offset(c[0] / w, c[1] / h),
+          Offset(c[2] / w, c[3] / h),
+          Offset(c[4] / w, c[5] / h),
+          Offset(c[6] / w, c[7] / h),
+        ], hit.confidence);
+      }
+    } catch (_) {
+      // Never let a bad frame crash the preview.
+    }
+  }
+
+  Future<void> _onFrameLegacy(CameraImage frame) async {
     if (_detecting || _busy) return;
     final now = DateTime.now();
     if (now.difference(_lastDetect).inMilliseconds < 350) return;
@@ -136,7 +223,20 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     // are not sendable to another isolate.)
     final startMs = DateTime.now().millisecondsSinceEpoch;
     try {
-      final gray = grayscaleFromCameraImage(frame);
+      // The camera stream delivers frames in the sensor's NATIVE orientation
+      // (landscape on virtually all Android devices), while the preview is
+      // drawn upright/portrait. Rotate the grayscale by the sensor orientation
+      // BEFORE detection so the quad — and the normalised coordinates derived
+      // from it — live in the same upright space the preview (and the overlay
+      // painter) use. Without this the green outline lands rotated ~90° and
+      // never sits on the document.
+      final gray0 =
+          ScanPerf.time('live.gray', () => grayscaleFromCameraImage(frame));
+      final rot = _controller?.description.sensorOrientation ?? 0;
+      final gray = (gray0 == null || rot == 0)
+          ? gray0
+          : ScanPerf.time(
+              'live.rotate', () => img.copyRotate(gray0, angle: rot));
       Quad? quad;
       double conf = 0;
       if (gray != null) {
@@ -144,8 +244,9 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
         // OpenCV detection in a BACKGROUND ISOLATE via compute so the preview
         // stays smooth. Falls back to the pure-Dart detector if OpenCV finds
         // nothing.
-        final png = img.encodePng(gray);
-        final list = await compute(detectQuadCvForIsolate, png);
+        final png = ScanPerf.time('live.pngEncode', () => img.encodePng(gray));
+        final list = await ScanPerf.timeAsync(
+            'live.detectIsolate', () => compute(detectQuadCvForIsolate, png));
         if (list != null && list.length == 9) {
           quad = Quad(
             (x: list[0], y: list[1]),
@@ -162,38 +263,63 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
       }
       _framesProcessed++;
       _lastDetectMs = DateTime.now().millisecondsSinceEpoch - startMs;
-      if (quad != null) _quadsFound++;
       if (!mounted) {
         _detecting = false;
         return;
       }
       if (quad == null) {
-        // No confident document — clear the border and reset stability.
-        _history.clear();
-        _stableSince = null;
-        if (_quadNorm != null) setState(() => _quadNorm = null);
+        _applyDetection(null, 0);
       } else {
         final gw = gray!.width.toDouble();
         final gh = gray.height.toDouble();
-        final raw = [
+        _applyDetection([
           Offset(quad.tl.x / gw, quad.tl.y / gh),
           Offset(quad.tr.x / gw, quad.tr.y / gh),
           Offset(quad.br.x / gw, quad.br.y / gh),
           Offset(quad.bl.x / gw, quad.bl.y / gh),
-        ];
-        final smoothed = _smooth(raw);
-        _trackStability(smoothed);
-        setState(() {
-          _quadNorm = smoothed;
-          _confidence = conf;
-        });
-        _maybeAutoCapture();
+        ], conf);
       }
     } catch (_) {
       // Never let a bad frame crash the preview.
     } finally {
       _detecting = false;
     }
+  }
+
+  /// Applies one detection result to the UI: smoothing, stability tracking,
+  /// overlay state, auto-capture. Shared by the V3 worker path and the legacy
+  /// path. [rawNorm] is the quad in normalised (0..1) upright space, or null
+  /// when no confident document was found.
+  void _applyDetection(List<Offset>? rawNorm, double conf) {
+    if (rawNorm == null) {
+      // No confident document — clear the border and reset stability.
+      _history.clear();
+      _stableSince = null;
+      _consistentFrames = 0;
+      _lastRawQuad = null;
+      if (_quadNorm != null) setState(() => _quadNorm = null);
+      return;
+    }
+    if (rawNorm.length == 4) _quadsFound++;
+    // Consecutive-consistency gate: corners must stay within ~2% total drift
+    // frame over frame.
+    final prevRaw = _lastRawQuad;
+    var drift = 0.0;
+    if (prevRaw != null && prevRaw.length == 4) {
+      for (var i = 0; i < 4; i++) {
+        drift += (rawNorm[i] - prevRaw[i]).distance;
+      }
+    }
+    _consistentFrames =
+        (prevRaw != null && drift <= 0.08) ? _consistentFrames + 1 : 1;
+    _lastRawQuad = rawNorm;
+    final smoothed = _smooth(rawNorm);
+    _trackStability(smoothed);
+    setState(() {
+      _quadNorm = smoothed;
+      _confidence = conf;
+    });
+    _maybeAutoCapture();
   }
 
   /// Temporal smoothing: rolling average of the last few quads so the border
@@ -232,6 +358,9 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   void _maybeAutoCapture() {
     if (!_autoCapture || _busy) return;
     if (_confidence < kHighConfidence) return; // only auto-fire when confident
+    // ≥N consecutive consistent frames — a single high-scoring frame (or a
+    // flickering wrong quad) can never fire the shutter.
+    if (_consistentFrames < _kRequiredConsistentFrames) return;
     final since = _stableSince;
     if (since == null) return;
     if (DateTime.now().difference(since).inMilliseconds >= 700) {
@@ -318,15 +447,68 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
             return const Center(
                 child: CircularProgressIndicator(color: Colors.white));
           }
+          // Upright (portrait) content aspect = width/height of the preview
+          // after the same 90° rotation _CoverPreview applies. The overlay
+          // painter needs this to reproduce the preview's BoxFit.cover
+          // scale/crop so corners land exactly where the preview shows them.
+          final previewSize = controller.value.previewSize;
+          final contentAspect =
+              previewSize == null ? null : previewSize.height / previewSize.width;
           return Stack(
             fit: StackFit.expand,
             children: [
               // Full-screen preview (cover so it fills the screen).
               _CoverPreview(controller: controller),
-              // Live document outline, coloured by confidence.
+              // TAP-TO-TARGET: tap the object to scan (card / one page of a
+              // stack / receipt) — detection locks onto it. The tap position
+              // is inverse-mapped through the same BoxFit.cover transform the
+              // overlay painter uses, into normalised frame coords.
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapDown: (d) {
+                      final w = constraints.maxWidth, h = constraints.maxHeight;
+                      final aspect = contentAspect;
+                      double nx, ny;
+                      if (aspect != null && aspect > 0) {
+                        final scale = math.max(w / aspect, h);
+                        final dispW = aspect * scale, dispH = scale;
+                        final dx = (w - dispW) / 2, dy = (h - dispH) / 2;
+                        nx = (d.localPosition.dx - dx) / dispW;
+                        ny = (d.localPosition.dy - dy) / dispH;
+                      } else {
+                        nx = d.localPosition.dx / w;
+                        ny = d.localPosition.dy / h;
+                      }
+                      setState(() {
+                        _focusNorm =
+                            Offset(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0));
+                        _focusAt = DateTime.now();
+                        // Old quad may belong to another object — reset.
+                        _history.clear();
+                        _consistentFrames = 0;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              // Focus dot feedback while a tap-target is active.
+              if (_focusNorm != null)
+                IgnorePointer(
+                  child: CustomPaint(
+                    painter: _FocusDotPainter(_focusNorm!, contentAspect),
+                  ),
+                ),
+              // Live document outline, coloured by confidence. RepaintBoundary
+              // so overlay repaints (10-15/s) never invalidate the preview
+              // layer or the rest of the UI.
               if (_quadNorm != null)
-                CustomPaint(
-                  painter: _LiveQuadPainter(_quadNorm!, _confidenceColor),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _LiveQuadPainter(
+                        _quadNorm!, _confidenceColor, contentAspect),
+                  ),
                 ),
               // DEBUG chip: shows whether detection is running on this device.
               if (_showDebug)
@@ -353,8 +535,9 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
                     ),
                   ),
                 ),
-              // Detection indicator.
-              if (_quadNorm != null)
+              // Detection indicator — only from MEDIUM confidence up. A
+              // low-confidence (red) quad must not claim "Document detected".
+              if (_quadNorm != null && _confidence >= kMediumConfidence)
                 Positioned(
                   top: MediaQuery.of(context).padding.top + 12,
                   left: 0,
@@ -515,18 +698,76 @@ class _CoverPreview extends StatelessWidget {
   }
 }
 
+/// Small ring marking the user's tap-to-target point, mapped through the
+/// same cover transform as the quad overlay.
+class _FocusDotPainter extends CustomPainter {
+  _FocusDotPainter(this.norm, this.contentAspect);
+  final Offset norm;
+  final double? contentAspect;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double dispW = size.width, dispH = size.height, dx = 0, dy = 0;
+    final aspect = contentAspect;
+    if (aspect != null && aspect > 0) {
+      final scale = math.max(size.width / aspect, size.height);
+      dispW = aspect * scale;
+      dispH = scale;
+      dx = (size.width - dispW) / 2;
+      dy = (size.height - dispH) / 2;
+    }
+    final c = Offset(dx + norm.dx * dispW, dy + norm.dy * dispH);
+    canvas.drawCircle(
+      c,
+      16,
+      Paint()
+        ..color = const Color(0xFF3DDC84)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    canvas.drawCircle(c, 3, Paint()..color = const Color(0xFF3DDC84));
+  }
+
+  @override
+  bool shouldRepaint(_FocusDotPainter old) =>
+      old.norm != norm || old.contentAspect != contentAspect;
+}
+
 /// Paints the live detected quad in normalised (0..1) space over the preview,
 /// tinted by [color] (green/orange/red by confidence).
 class _LiveQuadPainter extends CustomPainter {
-  _LiveQuadPainter(this.quadNorm, this.color);
+  _LiveQuadPainter(this.quadNorm, this.color, this.contentAspect);
   final List<Offset> quadNorm;
   final Color color;
+
+  /// Upright content aspect (width/height) of the preview being covered, or
+  /// null when unknown (then we map straight onto the canvas).
+  final double? contentAspect;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (quadNorm.length != 4) return;
+    // Never draw outside the preview area — a document extending past the
+    // cover-cropped preview would otherwise paint lines over surrounding UI
+    // ("green rectangle outside the camera zone").
+    canvas.clipRect(Offset.zero & size);
+    // Reproduce _CoverPreview's BoxFit.cover: scale the upright content so it
+    // fills the canvas (cropping the overflow), then map normalised (0..1)
+    // quad coords through that same scale + centre offset. Falls back to a
+    // plain stretch when the aspect is unknown.
+    double scale = 1, dispW = size.width, dispH = size.height, dx = 0, dy = 0;
+    final aspect = contentAspect;
+    if (aspect != null && aspect > 0) {
+      // Use unit content (width=aspect, height=1) and cover-scale it.
+      scale = math.max(size.width / aspect, size.height / 1.0);
+      dispW = aspect * scale;
+      dispH = 1.0 * scale;
+      dx = (size.width - dispW) / 2;
+      dy = (size.height - dispH) / 2;
+    }
     final pts = [
-      for (final p in quadNorm) Offset(p.dx * size.width, p.dy * size.height),
+      for (final p in quadNorm)
+        Offset(dx + p.dx * dispW, dy + p.dy * dispH),
     ];
     final path = Path()..addPolygon(pts, true);
     canvas.drawPath(
@@ -550,5 +791,7 @@ class _LiveQuadPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LiveQuadPainter old) =>
-      old.quadNorm != quadNorm || old.color != color;
+      old.quadNorm != quadNorm ||
+      old.color != color ||
+      old.contentAspect != contentAspect;
 }
