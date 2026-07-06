@@ -67,12 +67,22 @@ class DocumentsRepository {
     return (_db.select(_db.documents)
           ..where(
             (d) =>
-                d.title.like(pattern) &
+                // Match the title OR the OCR'd page text (V2.7) so scans are
+                // searchable by their contents, not just their name.
+                (d.title.like(pattern) | d.ocrText.like(pattern)) &
                 d.isTrashed.equals(false) &
                 d.isArchived.equals(false),
           )
           ..orderBy([(d) => OrderingTerm.desc(d.updatedAt)]))
         .watch();
+  }
+
+  /// Stores recognised OCR text for a document (V2.7). Called from the
+  /// background after a scan is saved.
+  Future<void> updateOcrText(int id, String text) {
+    return (_db.update(_db.documents)..where((d) => d.id.equals(id))).write(
+      DocumentsCompanion(ocrText: Value(text)),
+    );
   }
 
   Future<Document> getById(int id) {

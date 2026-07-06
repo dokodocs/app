@@ -14,11 +14,31 @@ import 'image_enhancer.dart' show ScanMode;
 /// failure so the caller can fall back to the pure-Dart enhancer. Pure
 /// top-level function → safe inside the render isolate.
 Uint8List? enhanceBytesCv(Uint8List bytes, ScanMode mode) {
-  cv.Mat? src, gray, work, blurred, sharp, out, clahed;
+  cv.Mat? src, resized, gray, work, blurred, sharp, out, clahed;
   cv.CLAHE? clahe;
   try {
-    src = cv.imdecode(bytes, cv.IMREAD_COLOR);
-    if (src.isEmpty) return null;
+    final decoded = cv.imdecode(bytes, cv.IMREAD_COLOR);
+    if (decoded.isEmpty) {
+      decoded.dispose();
+      return null;
+    }
+    // Cap working resolution (~2600px long edge ≈ 216 DPI on A4) so enhancement
+    // is fast — the pure-Dart per-op cost and OpenCV both scale with pixels,
+    // and a 12 MP capture is needlessly large for a document. Big speed win
+    // for "save/edit too slow" with no visible quality loss for docs.
+    const maxEdge = 2600;
+    final longEdge = decoded.cols > decoded.rows ? decoded.cols : decoded.rows;
+    if (longEdge > maxEdge) {
+      final s = maxEdge / longEdge;
+      resized = cv.resize(
+        decoded,
+        ((decoded.cols * s).round(), (decoded.rows * s).round()),
+      );
+      decoded.dispose();
+      src = resized;
+    } else {
+      src = decoded;
+    }
 
     switch (mode) {
       case ScanMode.bwText:
@@ -72,6 +92,8 @@ Uint8List? enhanceBytesCv(Uint8List bytes, ScanMode mode) {
   } catch (_) {
     return null;
   } finally {
+    // src is either `decoded` (kept) or `resized` (decoded already disposed),
+    // so disposing src covers both — don't double-dispose resized.
     src?.dispose();
     gray?.dispose();
     work?.dispose();

@@ -83,6 +83,7 @@ dependencies:
   # many photos at once to build a multi-page document.
   image_picker: ^1.2.3
   dartcv4: ^1.1.8
+  flutter_tesseract_ocr: ^0.4.31
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -113,6 +114,9 @@ flutter:
     - assets/patterns/
     # Note: assets/splash/ is consumed by flutter_native_splash config, and
     # assets/store/ is marketing-only — neither is bundled here on purpose.
+    # OCR (V2.7): Tesseract trained data + config (offline, no Play services).
+    - assets/tessdata/
+    - assets/tessdata_config.json
 
 flutter_launcher_icons:
   android: "launcher_icon"

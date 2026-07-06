@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
@@ -53,6 +54,13 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
   /// Smoothed detected quad in NORMALISED (0..1) preview space, or null.
   List<Offset>? _quadNorm;
   double _confidence = 0;
+
+  /// Diagnostics (shown in the on-screen debug chip): lets us see on-device
+  /// whether detection is actually running and finding documents.
+  int _framesProcessed = 0;
+  int _quadsFound = 0;
+  int _lastDetectMs = 0;
+  bool _showDebug = true;
 
   /// Recent raw quads for temporal smoothing (anti-flicker).
   final List<List<Offset>> _history = [];
@@ -116,7 +124,7 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     setState(() {});
   }
 
-  void _onFrame(CameraImage frame) {
+  Future<void> _onFrame(CameraImage frame) async {
     if (_detecting || _busy) return;
     final now = DateTime.now();
     if (now.difference(_lastDetect).inMilliseconds < 350) return;
@@ -126,23 +134,35 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
     // Detect synchronously on a downsampled grayscale — cheap enough per the
     // throttle. (Kept on the UI isolate: the image stream's backing buffers
     // are not sendable to another isolate.)
+    final startMs = DateTime.now().millisecondsSinceEpoch;
     try {
       final gray = grayscaleFromCameraImage(frame);
       Quad? quad;
       double conf = 0;
       if (gray != null) {
-        // Prefer OpenCV (accurate, no Play services). Encode the small
-        // grayscale to PNG and detect; fall back to the pure-Dart detector.
-        final cvHit = detectDocumentCvBytes(img.encodePng(gray));
-        if (cvHit != null) {
-          quad = cvHit.quad;
-          conf = cvHit.confidence;
+        // Build a small grayscale on the UI thread (cheap), then run the heavy
+        // OpenCV detection in a BACKGROUND ISOLATE via compute so the preview
+        // stays smooth. Falls back to the pure-Dart detector if OpenCV finds
+        // nothing.
+        final png = img.encodePng(gray);
+        final list = await compute(detectQuadCvForIsolate, png);
+        if (list != null && list.length == 9) {
+          quad = Quad(
+            (x: list[0], y: list[1]),
+            (x: list[2], y: list[3]),
+            (x: list[4], y: list[5]),
+            (x: list[6], y: list[7]),
+          );
+          conf = list[8];
         } else {
           final d = detectDocument(gray);
           quad = d?.quad;
           conf = d?.confidence ?? 0;
         }
       }
+      _framesProcessed++;
+      _lastDetectMs = DateTime.now().millisecondsSinceEpoch - startMs;
+      if (quad != null) _quadsFound++;
       if (!mounted) {
         _detecting = false;
         return;
@@ -307,6 +327,31 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
               if (_quadNorm != null)
                 CustomPaint(
                   painter: _LiveQuadPainter(_quadNorm!, _confidenceColor),
+                ),
+              // DEBUG chip: shows whether detection is running on this device.
+              if (_showDebug)
+                Positioned(
+                  bottom: MediaQuery.of(context).padding.bottom + 120,
+                  left: 12,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showDebug = false),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      color: Colors.black.withValues(alpha: 0.55),
+                      child: Text(
+                        'frames: $_framesProcessed  quads: $_quadsFound\n'
+                        'detect: ${_lastDetectMs}ms  conf: '
+                        '${(_confidence * 100).toStringAsFixed(0)}%\n'
+                        '(tap to hide)',
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               // Detection indicator.
               if (_quadNorm != null)

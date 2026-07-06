@@ -130,6 +130,22 @@ CvDetection? detectDocumentCvBytes(
   }
 }
 
+/// Isolate-friendly live detection for `compute`: takes encoded (PNG/JPEG)
+/// bytes and returns 9 doubles [tlx,tly, trx,try, brx,bry, blx,bly, confidence]
+/// or null. Returning a plain List keeps it sendable across isolates (a
+/// CvDetection instance is not), so the heavy OpenCV work runs off the UI
+/// thread and the camera preview stays smooth.
+List<double>? detectQuadCvForIsolate(Uint8List bytes) {
+  final hit = detectDocumentCvBytes(bytes);
+  if (hit == null) return null;
+  final q = hit.quad;
+  return [
+    q.tl.x, q.tl.y, q.tr.x, q.tr.y,
+    q.br.x, q.br.y, q.bl.x, q.bl.y,
+    hit.confidence,
+  ];
+}
+
 /// Detect on a file path (isolate-safe entry for `compute`).
 CvDetection? detectDocumentCvFile(String path) {
   try {
