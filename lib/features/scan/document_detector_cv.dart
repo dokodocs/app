@@ -38,16 +38,26 @@ CvDetection? detectDocumentCvBytes(
     small = scale < 1.0 ? cv.resize(full, (sw, sh)) : full.clone();
     gray = cv.cvtColor(small, cv.COLOR_BGR2GRAY);
     blur = cv.gaussianBlur(gray, (5, 5), 0);
-    edges = cv.canny(blur, 50, 150);
+    // AUTO Canny thresholds from the image's mean intensity (Murtaza/
+    // PyImageSearch technique) — robust across dim/bright lighting, unlike
+    // fixed thresholds that miss edges in low light. lower≈0.66·mean,
+    // upper≈1.33·mean.
+    final meanV = cv.mean(blur).val1;
+    final lower = (0.66 * meanV).clamp(0, 255).toDouble();
+    final upper = (1.33 * meanV).clamp(0, 255).toDouble();
+    edges = cv.canny(blur, lower, upper);
     // Morphological CLOSE dilates then erodes → bridges small gaps in the
     // Canny edges so a page outline forms ONE closed contour instead of
     // broken segments (the main reason detection was flaky / stuck yellow).
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9));
     closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel);
 
+    // RETR_EXTERNAL: only the OUTER contours — the document outline is an outer
+    // contour, so this is cleaner and faster than RETR_LIST (which also
+    // returns inner text/graphics contours we don't want).
     final (contours, _) = cv.findContours(
       closed,
-      cv.RETR_LIST,
+      cv.RETR_EXTERNAL,
       cv.CHAIN_APPROX_SIMPLE,
     );
 

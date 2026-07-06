@@ -247,3 +247,22 @@ document edges + apply perspective correction, then (2) shows an interactive
 iOS side. iOS still needs on-device validation of our own pipeline (dartcv4
 pod build + camera BGRA stream) — that remains the open iOS risk, unchanged by
 this review.
+
+---
+
+## Reference review — Murtaza / PyImageSearch OpenCV scanner (Python)
+
+The canonical Python document-scanner pipeline (resize → gray → GaussianBlur →
+Canny → dilate/erode → `findContours(RETR_EXTERNAL)` → biggest 4-pt contour →
+reorder → `getPerspectiveTransform` → `warpPerspective` → `adaptiveThreshold` +
+`bitwise_not` + `medianBlur`). We already matched most of it; three concrete
+techniques were **adopted into `document_detector_cv.dart` / `image_enhancer_cv.dart`:**
+- **Auto Canny thresholds** from mean intensity (`lower≈0.66·mean`,
+  `upper≈1.33·mean`) — robust across dim/bright lighting vs. our old fixed
+  50/150 (directly targets "doesn't detect under some lighting").
+- **`RETR_EXTERNAL`** (outer contours only) instead of `RETR_LIST` — cleaner,
+  faster document-outline finding.
+- **`medianBlur` after adaptive threshold** in B&W/Receipt modes — removes
+  speckle for crisper text.
+(We keep our extras the tutorial lacks: morphological CLOSE, multi-epsilon
+polygon approx, rectangularity-based confidence, temporal smoothing.)

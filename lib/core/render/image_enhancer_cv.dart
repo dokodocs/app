@@ -48,10 +48,14 @@ Uint8List? enhanceBytesCv(Uint8List bytes, ScanMode mode) {
         gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
         final block = mode == ScanMode.receipt ? 21 : 15;
         final c = mode == ScanMode.receipt ? 12.0 : 10.0;
-        work = cv.adaptiveThreshold(
+        final thresh = cv.adaptiveThreshold(
           gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY,
           block, c,
         );
+        // medianBlur cleans up speckle noise left by the threshold (Murtaza
+        // pipeline) → crisper black-on-white text.
+        work = cv.medianBlur(thresh, 3);
+        thresh.dispose();
         out = cv.cvtColor(work, cv.COLOR_GRAY2BGR);
 
       default:
