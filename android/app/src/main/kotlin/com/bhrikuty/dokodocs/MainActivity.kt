@@ -1,4 +1,4 @@
-package com.dokodocs.dokodocs
+package com.bhrikuty.dokodocs
 
 import io.flutter.embedding.android.FlutterActivity
 
