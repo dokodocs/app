@@ -82,48 +82,74 @@ Future<List<int>> saveScanSessionAsDocument({
       ),
     );
 
-    final pdfPath = p.join(docFolder.path, 'document.pdf');
-    await ScanPerf.timeAsync(
-        'save.pdfBuild',
-        () => buildPdfFromSources(
-              pages: [
-                for (final r in rendered)
-                  PdfPageSource(
-                      path: r.path, width: r.width, height: r.height),
-              ],
-              outputPath: pdfPath,
-            ));
-    final sizeBytes = await File(pdfPath).length();
+    // The pdf package holds every page's JPEG bytes in memory at once (it
+    // only writes to disk on the final save — there's no incremental/
+    // streaming write), so an unbounded single PDF risks an OOM on the
+    // 2–3 GB Nepal target as page count grows into the hundreds. Split into
+    // multiple documents instead — the same practice CamScanner/Adobe Scan
+    // use for very long scans.
+    final chunks = [
+      for (var start = 0; start < pages.length; start += kMaxPagesPerPdf)
+        (
+          start: start,
+          end: (start + kMaxPagesPerPdf).clamp(0, pages.length),
+        ),
+    ];
+    final documentIds = <int>[];
     final now = DateTime.now();
 
-    final documentId = await documentsRepository.insertDocument(
-      DocumentsCompanion.insert(
-        title: title,
-        localPath: pdfPath,
-        fileType: const Value('pdf'),
-        pageCount: Value(pages.length),
-        sizeBytes: Value(sizeBytes),
-        folderId: Value(folderId),
-        createdAt: Value(now),
-        updatedAt: Value(now),
-      ),
-    );
+    for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      final (:start, :end) = chunks[chunkIndex];
+      final chunkTitle =
+          chunks.length > 1 ? '$title (Part ${chunkIndex + 1})' : title;
+      final pdfPath = p.join(docFolder.path, 'document_$chunkIndex.pdf');
 
-    await pagesRepository.insertPages([
-      for (var i = 0; i < pages.length; i++)
-        PagesCompanion.insert(
-          documentId: documentId,
-          pageOrder: i,
-          originalImagePath: originalPaths[i],
-          localImagePath: rendered[i].path,
-          filter: Value(pages[i].filter),
-          rotation: Value(pages[i].rotation),
-          cropCoordinates: Value(pages[i].cropCoordinates),
-          needsReview: Value(pages[i].needsReview),
+      await ScanPerf.timeAsync(
+          'save.pdfBuild',
+          () => buildPdfFromSources(
+                pages: [
+                  for (var i = start; i < end; i++)
+                    PdfPageSource(
+                      path: rendered[i].path,
+                      width: rendered[i].width,
+                      height: rendered[i].height,
+                    ),
+                ],
+                outputPath: pdfPath,
+              ));
+      final sizeBytes = await File(pdfPath).length();
+
+      final documentId = await documentsRepository.insertDocument(
+        DocumentsCompanion.insert(
+          title: chunkTitle,
+          localPath: pdfPath,
+          fileType: const Value('pdf'),
+          pageCount: Value(end - start),
+          sizeBytes: Value(sizeBytes),
+          folderId: Value(folderId),
+          createdAt: Value(now),
+          updatedAt: Value(now),
         ),
-    ]);
+      );
 
-    return [documentId];
+      await pagesRepository.insertPages([
+        for (var i = start; i < end; i++)
+          PagesCompanion.insert(
+            documentId: documentId,
+            pageOrder: i - start,
+            originalImagePath: originalPaths[i],
+            localImagePath: rendered[i].path,
+            filter: Value(pages[i].filter),
+            rotation: Value(pages[i].rotation),
+            cropCoordinates: Value(pages[i].cropCoordinates),
+            needsReview: Value(pages[i].needsReview),
+          ),
+      ]);
+
+      documentIds.add(documentId);
+    }
+
+    return documentIds;
   }
 
   // JPEG/PNG: each page becomes its own image Document, since there's no
@@ -199,6 +225,16 @@ Future<List<int>> saveScanSessionAsDocument({
 /// each render holds a pure-Dart decode AND OpenCV working Mats at once, so
 /// 2 is the safe ceiling (3 produced save-time OOM crashes on-device).
 const kMaxRenderConcurrency = 2;
+
+/// Maximum pages in a single PDF document. `package:pdf` holds every page's
+/// JPEG bytes in memory until the final `doc.save()` — there's no
+/// incremental/streaming write — so an unbounded page count risks OOM on the
+/// 2–3 GB Nepal target as a scan grows into the hundreds of pages. Beyond
+/// this cap, [saveScanSessionAsDocument] auto-splits into multiple documents
+/// ("Title (Part 1)", "Title (Part 2)", ...), the same practice CamScanner/
+/// Adobe Scan use for very long scans. 200 pages of ~1-2 MB JPEG each keeps
+/// peak resident memory for one document in the ~200-400 MB range.
+const kMaxPagesPerPdf = 200;
 
 /// Maps [items] through async [fn] with at most [kMaxRenderConcurrency]
 /// in-flight at a time, preserving input order in the result. Used to turn the

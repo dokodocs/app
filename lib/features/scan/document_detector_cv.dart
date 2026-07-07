@@ -452,11 +452,24 @@ CvDetection? _detectQuadOnGrayMat(
     // corner to match edges properly", removes the need to re-crop.
     var refined = best.corners;
     cv.VecPoint2f? cps;
+    // cornerSubPix requires every point's (winSize) search window to stay
+    // fully inside the image, or it throws a native assertion — which real
+    // captures hit constantly (a page filling most of the frame puts corners
+    // within a few px of the border). Skip refinement outright when any
+    // corner is too close, instead of paying for a native throw/catch on
+    // (near enough) every detection.
+    const winSize = 11;
+    final canRefine = refined.every((p) =>
+        p.x >= winSize &&
+        p.x <= gray.cols - 1 - winSize &&
+        p.y >= winSize &&
+        p.y <= gray.rows - 1 - winSize);
     try {
+      if (!canRefine) throw StateError('corner too close to border');
       cps = cv.VecPoint2f.fromList([
         for (final p in refined) cv.Point2f(p.x, p.y),
       ]);
-      final snapped = cv.cornerSubPix(gray, cps, (11, 11), (-1, -1));
+      final snapped = cv.cornerSubPix(gray, cps, (winSize, winSize), (-1, -1));
       final cand = [
         for (final p in snapped) (x: p.x.toDouble(), y: p.y.toDouble()),
       ];

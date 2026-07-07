@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:opencv_core/opencv.dart' as cv;
@@ -144,8 +145,30 @@ void _drawWatermarkCv(cv.Mat img, String position) {
 /// text/detail (which the heavy blur erases) is preserved. scale≈235 keeps
 /// paper just below pure white so nothing clips.
 cv.Mat _normalizeIllumination(cv.Mat channel) {
-  final sigma = (channel.cols / 8).clamp(15.0, 200.0);
-  final bg = cv.gaussianBlur(channel, (0, 0), sigma);
+  // The background estimate is a LOW-FREQUENCY signal, so it doesn't need
+  // full resolution: blurring at full size with sigma up to 200 (ksize(0,0)
+  // auto-computes a kernel over 1000px wide) measured 5-10s/page on-device —
+  // the dominant cost of the whole render pipeline. Blur a small downscaled
+  // copy instead and upscale the (already-smooth) result back — visually
+  // identical shading correction at a tiny fraction of the work.
+  const workLongEdge = 200;
+  final longEdge = math.max(channel.cols, channel.rows);
+  final scale = longEdge > workLongEdge ? workLongEdge / longEdge : 1.0;
+  cv.Mat bg;
+  if (scale < 1.0) {
+    final small = cv.resize(
+      channel,
+      ((channel.cols * scale).round(), (channel.rows * scale).round()),
+    );
+    final sigma = (small.cols / 8).clamp(15.0, 200.0);
+    final smallBg = cv.gaussianBlur(small, (0, 0), sigma);
+    small.dispose();
+    bg = cv.resize(smallBg, (channel.cols, channel.rows));
+    smallBg.dispose();
+  } else {
+    final sigma = (channel.cols / 8).clamp(15.0, 200.0);
+    bg = cv.gaussianBlur(channel, (0, 0), sigma);
+  }
   final out = cv.divide(channel, bg, scale: 235, dtype: cv.MatType.CV_8U);
   bg.dispose();
   return out;

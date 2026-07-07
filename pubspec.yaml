@@ -102,6 +102,13 @@ dev_dependencies:
   # in a plain Dart test (no platform channel available there).
   path_provider_platform_interface: ^2.1.2
 
+# drift_dev 2.34.0's DartPlaceholder handling breaks on sqlparser >=0.44.5
+# (analyzer_.when() API removed); drift_dev's own fix requires analyzer ^13.0.0,
+# which the current Flutter SDK's bundled test/flutter_test can't satisfy. Pin
+# sqlparser back to the last compatible patch until drift_dev/Flutter SDK catch up.
+dependency_overrides:
+  sqlparser: 0.44.0
+
 flutter:
   uses-material-design: true
   generate: true # flutter gen-l10n, config in l10n.yaml
