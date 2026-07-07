@@ -51,3 +51,8 @@ coverage/
 test/fixtures/detection/
 docs/detection_results/
 
+
+# Local notes
+todo.md
+docs/
+TODO.md
