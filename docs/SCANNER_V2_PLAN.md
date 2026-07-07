@@ -1,7 +1,38 @@
 # DokoDocs Scanner V2 — World-Class, Self-Owned Pipeline
 
-**Status:** plan / design. **Date:** 2026-07-05.
+**Status: SUPERSEDED by V3 (2026-07-06/07).** Kept for the design rationale.
+**Current truth:** `docs/SCANNER_V3_POSTMORTEM.md` + `docs/DETECTION_POSTMORTEM.md`.
 **Companion:** `docs/SCANNER_AUDIT.md` (V1 audit + root causes).
+
+## What V3 actually built (vs this plan)
+
+- **The plan's core bet was right** (own the pipeline: `camera` + OpenCV, no
+  ML Kit/Play services) — but V2 shipped with `dartcv4`, which does NOT
+  bundle native libraries, so **OpenCV never ran on any device** and every
+  path silently fell back to pure Dart. V3's root fix: `opencv_core ^1.4.5`
+  (bundles `libdartcv.so`) + a gradle library-compileSdk override.
+- **Live loop:** V2's per-frame `compute()` + PNG round-trip replaced by a
+  long-lived `cv_worker` isolate (raw Y-plane bytes, `TransferableTypedData`,
+  latest-only mailbox, zero codecs in the frame loop).
+- **Detection:** V2's "largest 4-point contour + area-based confidence"
+  locked onto keyboards at 88%. V3: scored candidates from three sources
+  (adaptive Canny / Otsu OPEN / centre+tap-seeded flood fill), hard shape
+  filters (rectangle-only, minAreaRect snap), honest confidence
+  (high 0.65 / medium 0.50), tap-to-target, cornerSubPix refinement.
+- **Save:** two latent native double-frees (which crashed the app the moment
+  real natives shipped) fixed; rendering fully native (~20 s/page pure-Dart
+  → sub-second); background crop queue; one-step auto-save → PDF opens
+  directly; long scans chunked into bounded-size PDFs.
+- **UX decisions that differ from this plan:** auto-capture is OFF by
+  default (client request), the crop-editor stop and the save dialogs were
+  removed entirely, and `cunning_document_scanner`/ML Kit was deleted rather
+  than kept as an optional turbo path.
+- **Deferred:** ML segmentation hybrid (no-tap card detection in clutter),
+  OCR, iOS on-device validation.
+
+---
+
+*Original plan (2026-07-05) follows — historical.*
 
 ---
 

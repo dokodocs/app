@@ -7,9 +7,38 @@ DokoDocs is an open-source, self-hostable document scanner and PDF toolkit for i
 
 ## Status
 
-**Phase 1 + batch/versioning/calendar/home upgrade — built and verified.** The core money path (scan → filter → multi-page reorder → save → combine-to-PDF → share) plus five user-facing upgrades are in: high-quality batch scanning with a non-destructive pipeline and per-page revert-to-original, an always-on DokoDocs corner watermark applied at export time, document version history, dual-calendar dates (AD + Bikram Sambat), and a redesigned Home (styled tagline, favorite/pinned folders, Recent-10). Verified with unit + widget tests and a live run on an Android 16 emulator (Home, folders, tagline, and localized Nepali UI confirmed). Onboarding illustrations and the SVG logo are wired in.
+**Scanner V3 — the app owns the entire vision pipeline (2026-07).** ML Kit /
+VisionKit are fully removed; capture, live edge detection, crop, perspective
+correction, enhancement, and PDF rendering all run on DokoDocs' own
+**OpenCV pipeline** (`opencv_core`, natives bundled in the app), identical on
+every Android device with **zero Google Play services dependency**. Highlights:
 
-**Recent polish pass.** An animated brand splash screen; a **basic-camera fallback** so capture still works when Google Play services is unavailable (see below); a **Device status** checklist in Settings (camera / document scanner / local storage, with a scanner self-test); live in-preview color filters so Grayscale/B&W are visible before saving; a dimmed black-and-white export watermark; tappable info (ⓘ) details for watermark & local storage; DokoDocs → website links; a softer Home background; multi-document share straight from Home; and a clearer page-reorder handle.
+- **One-step scanning:** capture → automatic background crop → auto-save as
+  PDF → the PDF opens directly. No save button, no name/format dialogs, no
+  manual crop step (manual crop stays available for corrections).
+- **Live detection** on a long-lived OpenCV worker isolate: raw camera
+  Y-plane bytes via `TransferableTypedData`, zero image codecs in the frame
+  loop, latest-frame-only mailbox — self-paced 10–15 fps detection.
+- **Scored candidate detection** (not "largest rectangle wins"): three
+  candidate sources (adaptive Canny, Otsu bright-region, centre/tap-seeded
+  flood fill), hard shape filters (rectangles/squares only, minAreaRect snap
+  for occluded corners), five-factor document-ness scoring, and an **honest
+  confidence** — clutter (keyboards, desks) scores low instead of green.
+- **Tap-to-target:** tap any object in the preview (ID card, license, one
+  page of a stack, receipt) and detection locks onto it.
+- **Fully native rendering:** decode → resize → enhance → rotate → watermark
+  → JPEG entirely in OpenCV (~sub-second per page; the old pure-Dart path
+  took ~20 s/page on budget hardware). Non-destructive enhancement defaults
+  (illumination normalisation + CLAHE + mild unsharp; thresholding only in
+  explicit B&W/Receipt modes). Long scans split into bounded-size PDFs.
+- Full engineering history: `docs/SCANNER_V3_POSTMORTEM.md` and
+  `docs/DETECTION_POSTMORTEM.md` (trace-driven detection rebuild, incl. an
+  offline fixture harness).
+
+**Earlier phases** (batch scanning, non-destructive pipeline with per-page
+revert, corner watermark, version history, dual-calendar AD+BS dates,
+redesigned Home, animated splash, Device status checklist, live filter
+previews, multi-share) remain in place — see `docs/PHASE_1_SUMMARY.md`.
 
 ## Supported devices & OS versions
 
@@ -20,9 +49,33 @@ DokoDocs targets the newest Android/iOS **and** old, low-end hardware (the Nepal
 | **Android** | 7.0 Nougat (API 24) | Compiles against and is compliant with the latest Android, incl. **Android 15 & 16** (edge-to-edge, current `targetSdk`). `minSdk` follows Flutter's floor (API 21) in `android/app/build.gradle.kts`, but the **effective** merged minimum is **API 24** because the auth plugins (`google_sign_in`/`sign_in_with_apple`) require it. Covers **Android 8 → 15** and beyond with room to spare. |
 | **iOS** | iOS 13.0 | Deployment target 13.0 in the Xcode project — covers **iPhone 7 (on iOS 13–15) through the latest iPhone**. The VisionKit document scanner requires iOS 13+, which every supported device meets. |
 
-**Camera scanning** uses the on-device ML Kit Document Scanner (Android, `SCANNER_MODE_FULL`) / VisionKit (iOS) via `cunning_document_scanner` — the same on-device engines CamScanner / Adobe Scan / Microsoft Lens use. Out of the box this gives the full professional experience on both platforms: **rear camera by default, full-screen live preview, real-time edge detection with a live border, automatic capture, auto-crop with perspective correction, manual draggable corner handles, rotate, flash, retake, and high-quality output** — so the app deliberately does not reimplement a custom camera/edge-detection stack. On Android this requires **Google Play services** to be present and up to date — the scanner module is delivered through it. On a device/emulator without current Play services the ML Kit scanner can't open; the app then **falls back to a custom rear-camera scanner** (`camera` package) — it **strictly** opens the back (primary-wide) lens (never the front), shows a full-screen preview with a **live green document border**, flash toggle, and capture button, then opens the crop editor (auto-detected corners + perspective correction) right after the shot. **Gallery import** remains available too (neither needs Play services). Settings → **Device status** shows the live availability of the camera, the document scanner (with a one-tap self-test), and local storage.
+**Camera scanning is DokoDocs' own pipeline** — the `camera` plugin
+(CameraX / AVFoundation) for capture and **OpenCV** (`opencv_core`, native
+libraries bundled in the app) for everything visual. There is **no ML Kit,
+no VisionKit, and no Google Play services dependency**: the experience is
+identical on a Play-certified flagship, a de-Googled budget phone, and an
+emulator. What the user gets: strict rear camera, full-screen live preview,
+**real-time edge detection with a confidence-coloured border** (green =
+locked), **tap-to-target** object selection, optional auto-capture (off by
+default — the user frames the shot and taps the shutter), then an automatic
+full-resolution re-detect → perspective crop → enhance → **PDF saved and
+opened in one step**. **Gallery import** (multi-select, HEIC-safe) feeds the
+same pipeline. Settings → **Device status** shows live camera/storage
+availability.
 
-**Manual crop & perspective editor.** Pages that arrive **without** native edge-detection — gallery imports and the basic-camera fallback — can be corrected with a built-in **Crop** editor (review screen → Crop): full-bleed image, four **draggable corner handles** with a live green outline of exactly what's kept, a **Reset** to the full frame, and Confirm/Cancel. Confirming warps the selected quad flat (perspective-corrected, true aspect ratio, nothing clipped) on a background isolate. Rotate sits beside it on the same screen. It's pure Flutter, so it behaves identically on Android and iOS.
+*History:* V1 delegated to ML Kit / VisionKit via `cunning_document_scanner`.
+That path was removed after ML Kit proved unavailable or broken
+(Play-services-less devices; an unfixable ML Kit 16.0.0 NPE on some Samsung
+devices) — see `docs/SCANNER_AUDIT.md` (V1), `docs/SCANNER_V2_PLAN.md`
+(superseded), and `docs/SCANNER_V3_POSTMORTEM.md` (current pipeline).
+
+**Manual crop & perspective editor.** Cropping is normally fully automatic
+(full-res re-detection + `warpPerspective` in the background right after
+capture). For corrections, the built-in **Crop** editor remains: full-bleed
+image, four **draggable corner handles** with a live green outline, **Reset**
+to the full frame, Confirm/Cancel — confirming warps the quad flat
+(perspective-corrected, true aspect ratio) off the UI thread. Pure Flutter +
+OpenCV, identical on Android and iOS.
 
 Required permissions are declared for every supported OS level: Android `CAMERA`, `READ_MEDIA_IMAGES` + `READ_MEDIA_VISUAL_USER_SELECTED` (Android 13/14+ photo access) with a `READ_EXTERNAL_STORAGE` fallback (≤ API 32); iOS `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSPhotoLibraryAddUsageDescription` (without these iOS crashes on camera/photo access — now fixed).
 
@@ -79,6 +132,9 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — module boundaries, data flow
 - [`docs/DATABASE.md`](docs/DATABASE.md) — schema + migration notes
 - [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) — every package choice/substitution, with rationale
+- [`docs/SCANNER_V3_POSTMORTEM.md`](docs/SCANNER_V3_POSTMORTEM.md) — the current scanner architecture: phases, root causes, save pipeline, status vs targets
+- [`docs/DETECTION_POSTMORTEM.md`](docs/DETECTION_POSTMORTEM.md) — the trace-driven detection rebuild (scored candidates, harness protocol, fixture results)
+- [`docs/SCANNER_AUDIT.md`](docs/SCANNER_AUDIT.md) / [`docs/SCANNER_V2_PLAN.md`](docs/SCANNER_V2_PLAN.md) — historical: the V1 audit and the (superseded) V2 plan
 - [`prompt/launch_app.md`](prompt/launch_app.md) — the authoritative Google Play / Apple App Store launch checklist (Phase 1 exit gate)
 - `docs/PHASE_N_SUMMARY.md` — one per completed phase (what shipped, what was tested, manual setup required)
 
@@ -89,20 +145,18 @@ The scanning experience is built on, and inspired by, excellent open-source work
 - **[jachzen/cunning_document_scanner](https://github.com/jachzen/cunning_document_scanner)** — the Flutter plugin DokoDocs uses for capture and document detection, wrapping **Google ML Kit Document Scanner** (Android, `SCANNER_MODE_FULL`) and **Apple VisionKit** (iOS). This is our **primary** scan path and is used unchanged. Thank you 🙏
 - **[ishaquehassan/document_scanner_flutter](https://github.com/ishaquehassan/document_scanner_flutter)** — inspiration for the **post-capture** side: the multi-mode filter set (Auto / Magic Color / Color / Professional / HD / Extreme Clarity / Receipt / Book / B&W Text), the enhancement-driven "scan modes" concept, and page-management/editing UX. We adopted the *ideas*, re-implemented for our pipeline rather than copying code. Thank you 🙏
 
-### What we adopted, and how it stays compatible
+### Where the current pipeline lives
 
-We deliberately **do not** replace the scanner SDK, ML Kit/VisionKit, OpenCV-free detection, or OCR. Every improvement is layered *around* the native scanner:
-
-| Adopted idea | Where it lives | Why it's compatible |
-| --- | --- | --- |
-| Post-capture enhancement pipeline (de-shadow → whiten → adaptive contrast → sharpen) | `lib/core/render/image_enhancer.dart` | Pure `image`-package ops in the existing render isolate; applied to the processed copy, never the original |
-| Multi-mode scan filters | `image_enhancer.dart` + `filter_picker.dart` | Each mode only changes enhancement *parameters* — no scanner change |
-| Confidence-gated auto-crop (skip editor when confident) | `document_detector.dart`, `scan_capture.dart` | Runs on the captured still *after* the native flow; editor is the fallback |
-| Live border: strict detection, confidence colour, temporal smoothing, auto-capture | `document_detector.dart`, `camera_scanner_screen.dart` | Only used on the **custom fallback camera** (when ML Kit is unavailable); native path keeps its own UI |
-
-### ML Kit / VisionKit limitations (and our closest feasible alternative)
-
-Google's and Apple's on-device detectors are closed-source — we cannot tune their internal edge detector, green border, or crop algorithm. So on the **native** path we accept their (excellent) behaviour as-is. The custom **fallback** camera + our lightweight pure-Dart detector exists only for devices without Google Play services; it is intentionally conservative (shows no border rather than a wrong one) and hands off to the manual crop editor when confidence is low.
+| Piece | Where it lives |
+| --- | --- |
+| Live detection worker (long-lived isolate, zero-codec frames) | `lib/core/cv/cv_worker.dart` |
+| Scored candidate detector (3 sources, hard filters, tap-to-target, JSON trace) | `lib/features/scan/document_detector_cv.dart` |
+| Camera screen (preview, overlay, tap-to-target, stability gate) | `lib/features/scan/camera_scanner_screen.dart` |
+| Capture flow (background crop queue, one-step auto-save) | `lib/features/scan/scan_capture.dart` |
+| Native render (decode→enhance→rotate→watermark→JPEG in OpenCV) | `lib/core/render/image_enhancer_cv.dart` + `page_renderer.dart` |
+| Pure-Dart fallbacks (only when natives are unavailable) | `document_detector.dart`, `image_enhancer.dart`, `crop_processor.dart` |
+| Offline detection harness (drop photos in `test/fixtures/detection/`) | `test/detection_harness_test.dart` → `docs/detection_results/` |
+| Stage timing (prints `[ScanPerf]` lines to logcat) | `lib/core/perf/scan_perf.dart` |
 
 ## License
 

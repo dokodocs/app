@@ -21,7 +21,9 @@ Per the master spec (§8.2: "Confirm/replace any package listed in Section 2 tha
 
 | Package | Version | Why |
 |---|---|---|
-| `cunning_document_scanner` | `^2.5.0` | Scanner package decision — your pick over `flutter_doc_scanner` (less mature, unverified publisher, still 0.0.x) and custom `camera`+`opencv_dart` (far more build/maintenance effort, higher crash risk on 3GB RAM devices). v2.5.0, verified publisher, wraps Android ML Kit Document Scanner + iOS VisionKit. Verified current on pub.dev. |
+| ~~`cunning_document_scanner`~~ | REMOVED (V2/V3) | Was the V1 scanner (ML Kit / VisionKit wrapper). Removed: ML Kit needs Google Play services and hit an unfixable 16.0.0 NPE on some Samsung devices. Replaced by the app's own pipeline (`camera` + `opencv_core`) — see `docs/SCANNER_V3_POSTMORTEM.md`. |
+| `camera` | `^0.11.x` | V2/V3 scanner capture: full lens/resolution/stream control (CameraX / AVFoundation), live frame stream for edge detection. |
+| `opencv_core` | `^1.4.5` | V3 vision engine: edge detection, quad finding, perspective warp, enhancement, native page render. **Bundles the OpenCV native libraries** — plain `dartcv4` (used briefly in V2) is bindings-only and shipped no `.so`, so every cv call silently failed on-device. Requires the library-compileSdk override in `android/build.gradle.kts`. |
 | `image` | `^4.9.1` | Spec §2.1, explicitly named — filters (Grayscale/B&W/brightness-contrast) applied post-capture regardless of scanner package. |
 | `pdf` | `^3.13.0` | Spec §2.1, explicitly named — PDF creation. |
 | `pdfrx` | `^2.4.4` | PDF **viewing**. Spec §2.1 named `pdfrx` *or* `syncfusion_flutter_pdfviewer` — picked `pdfrx` (fully open-source, MIT) per the Nepal override's "prefer fully open-source; propose an alternative before using Syncfusion" (§7), avoiding the Syncfusion community-license eligibility question entirely rather than checking it. |
@@ -39,7 +41,8 @@ Per the master spec (§8.2: "Confirm/replace any package listed in Section 2 tha
 | `go_router` (or any router) | Not adding | The bottom-nav-shell prompt itself offers a fallback ("else an IndexedStack") for when go_router isn't present. Adding go_router now would be an unreviewed new dependency beyond what either the original spec or the onboarding prompt (which caps new deps at 2) actually requires — an `IndexedStack` + one `Navigator` per tab satisfies "each destination preserves its own navigation stack" without it. |
 | `shared_preferences` | Not adding | The onboarding prompt allows either `shared_preferences` or a `UserSettings` DB row for the first-launch flag. Chose the DB row (`UserSettings.onboardingComplete`, drift migration) since `UserSettings` is already the single-row local-first settings source of truth — adding a second, parallel persistence mechanism for one boolean would be redundant. |
 | `riverpod_annotation`, `riverpod_generator`, `riverpod_lint`, `custom_lint` | Still deferred | No architectural need has come up yet; classic Riverpod API continues to be sufficient through Phase 1. |
-| `camera`, `opencv_dart`, `flutter_doc_scanner` | Not chosen | Scanner package alternatives not picked — see `cunning_document_scanner` above. |
+| `flutter_doc_scanner` | Not chosen | Immature (0.0.x, unverified publisher) at evaluation time. |
+| `dartcv4` (direct) | Replaced | Bindings-only, no bundled natives — the V3 root-cause bug. Use `opencv_core` (which re-exports it WITH natives). |
 | `syncfusion_flutter_pdf`, `syncfusion_flutter_pdfviewer` | Not chosen | Open-source `pdf`/`pdfrx` picked instead — see above. |
 | `firebase_auth` | Not adding | `google_sign_in`/`sign_in_with_apple` cover Phase 1's named auth providers without pulling in the full Firebase SDK; revisit only if Phase 2's backend JWT/OAuth-relay design calls for it. |
 | `mobile_scanner`, `qr_flutter` | Phase 3 | QR module unimplemented until Phase 3. |

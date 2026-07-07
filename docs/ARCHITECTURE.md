@@ -10,6 +10,11 @@ lib/
     theme/                   # Material 3 (Android) + Cupertino-appropriate (iOS) shared theme
     router/                  # go_router route table, one entry per feature
     l10n/                    # ARB source strings (en, ne) — see l10n.yaml at repo root
+    cv/                      # cv_worker: long-lived OpenCV isolate for live detection (V3)
+    perf/                    # ScanPerf stage timing ([ScanPerf] logcat lines)
+    render/                  # page render pipeline: native OpenCV fast path + pure-Dart fallback
+    pdf/                     # PDF builder (embeds pre-encoded JPEGs, no re-encode)
+    flags.dart               # compile-time feature flags (kUseScannerV3)
   features/
     onboarding/               # Phase 0/1 — splash, local-first explainer
     home/                     # Phase 1 — grid/list, folders, tags, favorites, search
@@ -34,6 +39,31 @@ Every module folder carries a `README.md` stating its responsibility, target pha
 ```
 UI widget (feature) → Riverpod provider (feature) → drift DAO (core/database) → SQLite (device disk)
 ```
+
+## Scan pipeline (V3 — see docs/SCANNER_V3_POSTMORTEM.md)
+
+```
+CameraImage (Y plane)
+  → grayBytesFromCameraImage (~500px raw bytes, UI thread, no codecs)
+  → CvWorker isolate (TransferableTypedData, latest-frame-only mailbox)
+      → detectDocumentCvGray: Mat.fromList → native rotate → scored
+        candidate detection (Canny / Otsu / flood-fill sources, hard shape
+        filters, tap-to-target, cornerSubPix) → honest confidence
+  → overlay (BoxFit.cover-mapped quad, confidence colour)
+
+Shutter
+  → raw still returned immediately (camera stays live)
+  → BACKGROUND: full-res re-detect + warpPerspective (native-first, no
+    pure-Dart 12MP decode), path-keyed page swap in the scan session
+  → auto-save: renderDocumentCv per page (decode→2600px→enhance→rotate→
+    watermark→JPEG, all OpenCV, bounded ×2 parallel) → PDF (chunked)
+  → the saved PDF opens directly (no review stop, no dialogs)
+```
+
+Threading rule: no image work on the UI thread, ever. Live detection uses
+the persistent worker isolate; full-res one-shot jobs (crop, render) use
+`compute`. Pure-Dart image code survives only as the fallback when the
+OpenCV natives are unavailable.
 
 No network calls exist until Phase 2. `UserSettings.storageMode` defaults to `local`; every other mode (Phase 2+) is additive — the local path always keeps working.
 
