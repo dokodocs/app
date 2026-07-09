@@ -319,10 +319,10 @@ class _SocialSite {
 const _socialSites = <_SocialSite>[
   _SocialSite('GitHub', 'https://github.com/dokodocs/app', Icons.code),
   _SocialSite('Instagram', 'https://instagram.com/dokodocs', Icons.camera_alt_outlined),
-  _SocialSite('X (Twitter)', 'https://x.com/dokodocs', Icons.alternate_email),
+  _SocialSite('X (Twitter)', 'https://x.com/dokodocs_app', Icons.alternate_email),
   _SocialSite('TikTok', 'https://tiktok.com/@dokodocs', Icons.music_note_outlined),
   _SocialSite('YouTube', 'https://youtube.com/@dokodocs', Icons.smart_display_outlined),
-  _SocialSite('Facebook', 'https://facebook.com/dokodocs', Icons.facebook),
+  _SocialSite('Facebook', 'https://www.facebook.com/people/Dokodocs/61591338342900/', Icons.facebook),
   _SocialSite('LinkedIn', 'https://linkedin.com/company/dokodocs', Icons.business_outlined),
 ];
 
