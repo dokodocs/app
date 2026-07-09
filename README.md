@@ -36,7 +36,7 @@ DokoDocs is an open-source, self-hostable document scanner and PDF toolkit for i
 | `armeabi-v7a` | Older / very low-end 32-bit phones | [Download](https://github.com/dokodocs/app/releases/latest/download/DokoDocs-armeabi-v7a.apk) |
 | `x86_64` | Emulators / Chromebooks | [Download](https://github.com/dokodocs/app/releases/latest/download/DokoDocs-x86_64.apk) |
 
-> On first install Android will ask you to allow "install from unknown sources" — that's normal for apps installed outside the Play Store. Google Play and App Store listings are coming with the Phase 1 launch gate ([`prompt/launch_app.md`](prompt/launch_app.md)).
+> On first install Android will ask you to allow "install from unknown sources" — that's normal for apps installed outside the Play Store. Google Play and App Store listings are coming with the Phase 1 launch gate.
 
 **iOS:** App Store release is in progress; for now build from source (see [Getting started](#getting-started-once-flutter-is-installed--see-docsroadmapmd-step-0)).
 
@@ -131,7 +131,17 @@ Scan is one unified chooser — **single page (camera)**, **multiple pages / bat
 
 ## Why
 
-Primary market is Nepal: ~95% Android on budget (2–3GB RAM) devices, unstable/expensive connectivity, Devanagari as the primary local language, and real institutional distrust of foreign cloud services. The build order and every default in this repo (Android-first, Nepali OCR pulled forward, ≤40MB APK target, local payment gateways for the corporate tier) is driven by that. Full rationale: `prompt/DokoDocs_Nepal_Launch_Plan.md`.
+Primary market is Nepal: ~95% Android on budget (2–3GB RAM) devices, unstable/expensive connectivity, Devanagari as the primary local language, and real institutional distrust of foreign cloud services. The build order and every default in this repo (Android-first, Nepali OCR pulled forward, ≤40MB APK target, local payment gateways for the corporate tier) is driven by that.
+
+## 🔭 Future plans (after 10k downloads on Android & iOS)
+
+Once DokoDocs crosses **10,000 downloads on both Android and iOS**, the focus shifts to:
+
+- **Nepali (Devanagari) + English OCR** — fully on-device, searchable scans
+- **Self-hosted sync backend** — your own server / LAN PC / personal cloud as the sync destination, with a reference deployment guide (`docs/DEPLOYMENT.md`)
+- **Corporate / organization tier** — admin panel and multi-user server deployment, unlocked by a **one-time** license fee (never a subscription), with local Nepali payment gateways
+- **Google Play & App Store** distribution alongside the direct APK
+- **APK size diet** back under the ≤40 MB target for budget devices
 
 ## Principles
 
@@ -148,7 +158,6 @@ Primary market is Nepal: ~95% Android on budget (2–3GB RAM) devices, unstable/
 ## Repository layout
 
 ```
-prompt/          Source planning documents (master spec, Nepal overrides, launch plan)
 docs/            ROADMAP, ARCHITECTURE, DATABASE, DEPENDENCIES, phase summaries
 assets/          Logo, illustrations, icon sources, patterns
 lib/
@@ -181,7 +190,6 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 - [`docs/SCANNER_V3_POSTMORTEM.md`](docs/SCANNER_V3_POSTMORTEM.md) — the current scanner architecture: phases, root causes, save pipeline, status vs targets
 - [`docs/DETECTION_POSTMORTEM.md`](docs/DETECTION_POSTMORTEM.md) — the trace-driven detection rebuild (scored candidates, harness protocol, fixture results)
 - [`docs/SCANNER_AUDIT.md`](docs/SCANNER_AUDIT.md) / [`docs/SCANNER_V2_PLAN.md`](docs/SCANNER_V2_PLAN.md) — historical: the V1 audit and the (superseded) V2 plan
-- [`prompt/launch_app.md`](prompt/launch_app.md) — the authoritative Google Play / Apple App Store launch checklist (Phase 1 exit gate)
 - `docs/PHASE_N_SUMMARY.md` — one per completed phase (what shipped, what was tested, manual setup required)
 
 ## Credits & acknowledgements
