@@ -56,3 +56,6 @@ docs/detection_results/
 todo.md
 docs/
 TODO.md
+
+# Local signed APK copies for manual release upload
+/release_apk/
