@@ -1,9 +1,55 @@
+<div align="center">
+
+<img src="assets/logo/logo_mark.png" alt="DokoDocs logo" width="140"/>
+
 # DokoDocs
 
 **तपाईंको कागजात, तपाईंकै फोनमा — your documents, on your own phone.**
-Scan. Organize. Sync. Own Your Data.
+
+*Scan. Organize. Sync. Own Your Data.*
+
+[![Download APK](https://img.shields.io/badge/Download-Android%20APK-2ea44f?style=for-the-badge&logo=android&logoColor=white)](https://github.com/dokodocs/app/releases/latest)
+[![Website](https://img.shields.io/badge/Website-dokodocs.com-1a7f5a?style=for-the-badge&logo=googlechrome&logoColor=white)](https://dokodocs.com)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge)](LICENSE)
+
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![OpenCV](https://img.shields.io/badge/OpenCV-native%20pipeline-5C3EE8?logo=opencv&logoColor=white)](docs/SCANNER_V3_POSTMORTEM.md)
+[![Platform](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](#supported-devices--os-versions)
+[![Platform](https://img.shields.io/badge/iOS-13%2B-000000?logo=apple&logoColor=white)](#supported-devices--os-versions)
+[![GitHub stars](https://img.shields.io/github/stars/dokodocs/app?style=social)](https://github.com/dokodocs/app/stargazers)
+
+<img src="assets/illustrations/onboard_own.png" alt="DokoDocs — Scan. Organize. Own your data." width="720"/>
+
+</div>
+
+---
 
 DokoDocs is an open-source, self-hostable document scanner and PDF toolkit for iOS and Android — comparable to CamScanner / Adobe Scan / Microsoft Lens, but built around **data ownership**: your files live on your device by default, and any sync destination (your own server, your own LAN PC, or your own cloud account) is something *you* configure. DokoDocs never routes files through a proprietary company server you didn't choose.
+
+## 📲 Download
+
+**Android (signed APK):** grab the latest build from the [**Releases page**](https://github.com/dokodocs/app/releases/latest).
+
+| Build | For | Direct link |
+|---|---|---|
+| `arm64-v8a` | Most phones from ~2016 onward (**recommended**) | [Download](https://github.com/dokodocs/app/releases/latest/download/DokoDocs-arm64-v8a.apk) |
+| `armeabi-v7a` | Older / very low-end 32-bit phones | [Download](https://github.com/dokodocs/app/releases/latest/download/DokoDocs-armeabi-v7a.apk) |
+| `x86_64` | Emulators / Chromebooks | [Download](https://github.com/dokodocs/app/releases/latest/download/DokoDocs-x86_64.apk) |
+
+> On first install Android will ask you to allow "install from unknown sources" — that's normal for apps installed outside the Play Store. Google Play and App Store listings are coming with the Phase 1 launch gate ([`prompt/launch_app.md`](prompt/launch_app.md)).
+
+**iOS:** App Store release is in progress; for now build from source (see [Getting started](#getting-started-once-flutter-is-installed--see-docsroadmapmd-step-0)).
+
+## ✨ What it does
+
+<div align="center">
+
+| 📷 Scan | 🗂️ Organize | 🔒 Own |
+|:---:|:---:|:---:|
+| <img src="assets/illustrations/onboard_scan.png" width="220"/> | <img src="assets/illustrations/onboard_organize.png" width="220"/> | <img src="assets/illustrations/onboard_own.png" width="220"/> |
+| Live edge detection, one-tap capture, automatic crop & enhance → PDF | Folders, batch scans, version history, dual-calendar AD + BS dates | Local-first storage; sync only to destinations *you* configure |
+
+</div>
 
 ## Status
 
@@ -104,6 +150,7 @@ Primary market is Nepal: ~95% Android on budget (2–3GB RAM) devices, unstable/
 ```
 prompt/          Source planning documents (master spec, Nepal overrides, launch plan)
 docs/            ROADMAP, ARCHITECTURE, DATABASE, DEPENDENCIES, phase summaries
+assets/          Logo, illustrations, icon sources, patterns
 lib/
   core/          Shared: database (drift), theme, l10n — see lib/core/README.md
   features/      One folder per screen/module, each with its own README.md
@@ -127,7 +174,6 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 
 ## Documentation
 
-- [`TODO.md`](TODO.md) — the master, checkbox-level task list: every doc deliverable, every build step, and the full Google Play / Apple App Store launch gate, all in one place
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the step-wise build plan and *why*, with a test gate per step
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — module boundaries, data flow
 - [`docs/DATABASE.md`](docs/DATABASE.md) — schema + migration notes
@@ -142,7 +188,7 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 
 The scanning experience is built on, and inspired by, excellent open-source work:
 
-- **[jachzen/cunning_document_scanner](https://github.com/jachzen/cunning_document_scanner)** — the Flutter plugin DokoDocs uses for capture and document detection, wrapping **Google ML Kit Document Scanner** (Android, `SCANNER_MODE_FULL`) and **Apple VisionKit** (iOS). This is our **primary** scan path and is used unchanged. Thank you 🙏
+- **[jachzen/cunning_document_scanner](https://github.com/jachzen/cunning_document_scanner)** — DokoDocs' original (V1) scan path, wrapping **Google ML Kit Document Scanner** (Android) and **Apple VisionKit** (iOS). Superseded by our own OpenCV pipeline, but it got the first versions shipping. Thank you 🙏
 - **[ishaquehassan/document_scanner_flutter](https://github.com/ishaquehassan/document_scanner_flutter)** — inspiration for the **post-capture** side: the multi-mode filter set (Auto / Magic Color / Color / Professional / HD / Extreme Clarity / Receipt / Book / B&W Text), the enhancement-driven "scan modes" concept, and page-management/editing UX. We adopted the *ideas*, re-implemented for our pipeline rather than copying code. Thank you 🙏
 
 ### Where the current pipeline lives
@@ -157,6 +203,22 @@ The scanning experience is built on, and inspired by, excellent open-source work
 | Pure-Dart fallbacks (only when natives are unavailable) | `document_detector.dart`, `image_enhancer.dart`, `crop_processor.dart` |
 | Offline detection harness (drop photos in `test/fixtures/detection/`) | `test/detection_harness_test.dart` → `docs/detection_results/` |
 | Stage timing (prints `[ScanPerf]` lines to logcat) | `lib/core/perf/scan_perf.dart` |
+
+## 🌐 Connect with us
+
+<div align="center">
+
+[![Website](https://img.shields.io/badge/dokodocs.com-1a7f5a?style=for-the-badge&logo=googlechrome&logoColor=white)](https://dokodocs.com)
+[![Facebook](https://img.shields.io/badge/Facebook-1877F2?style=for-the-badge&logo=facebook&logoColor=white)](https://facebook.com/dokodocs)
+[![Instagram](https://img.shields.io/badge/Instagram-E4405F?style=for-the-badge&logo=instagram&logoColor=white)](https://instagram.com/dokodocs)
+[![X](https://img.shields.io/badge/X%20(Twitter)-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/dokodocs)
+[![TikTok](https://img.shields.io/badge/TikTok-010101?style=for-the-badge&logo=tiktok&logoColor=white)](https://tiktok.com/@dokodocs)
+[![YouTube](https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtube.com/@dokodocs)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/company/dokodocs)
+
+⭐ **If DokoDocs is useful to you, star the repo — it genuinely helps the project get discovered.** ⭐
+
+</div>
 
 ## License
 
