@@ -1,0 +1,28 @@
+{
+  "model": "dokodocs-docseg-unet-v1",
+  "input": {
+    "shape": [
+      1,
+      160,
+      160,
+      1
+    ],
+    "dtype": "float32",
+    "range": "0..1",
+    "color": "grayscale"
+  },
+  "output": {
+    "shape": [
+      1,
+      160,
+      160,
+      1
+    ],
+    "dtype": "float32",
+    "range": "0..1",
+    "threshold": 0.5
+  },
+  "resize": "bilinear (squash aspect); rescale output quad to native px",
+  "trained_on": "synthetic fixtures seed 1337 (Apache-2.0), no real data",
+  "heldout_quad_iou": 0.98
+}

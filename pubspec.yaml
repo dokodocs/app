@@ -86,6 +86,7 @@ dependencies:
   # many photos at once to build a multi-page document.
   image_picker: ^1.2.3
   opencv_core: ^1.4.5
+  tflite_flutter: ^0.12.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -121,6 +122,11 @@ flutter:
     - assets/logo/
     - assets/illustrations/
     - assets/patterns/
+    # ML document-segmentation model (TFLite) for the hybrid detector. Trained
+    # only on DokoDocs' own Apache-2.0 synthetic fixtures (see
+    # docs/dataset_notice.md + tool/dataset/train_seg_model.py). Loaded at
+    # runtime via rootBundle -> cached file so isolates can File-read it.
+    - assets/models/
     # Note: assets/splash/ is consumed by flutter_native_splash config, and
     # assets/store/ is marketing-only — neither is bundled here on purpose.
 

@@ -43,6 +43,9 @@ const kMediumConfidence = 0.50;
 Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
   final srcPath = args['srcPath'] as String;
   final outPath = args['outPath'] as String;
+  // Optional path to the staged ML model file; when present, the detector runs
+  // the hybrid CV+ML adjudicator (see document_detector_cv.dart).
+  final modelPath = args['docSegModelPath'] as String?;
   final bytes =
       ScanPerf.time('page.read', () => File(srcPath).readAsBytesSync());
 
@@ -51,8 +54,8 @@ Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
   // ">4 minutes to save 3 pages" complaint) even when OpenCV then did all
   // the real work. Now: native detect → native dims → native warp; the
   // Dart decode happens ONLY on the no-natives fallback path.
-  final cvHit =
-      ScanPerf.time('page.detectCv', () => detectDocumentCvBytes(bytes));
+  final cvHit = ScanPerf.time('page.detectCv',
+      () => detectDocumentCvBytes(bytes, modelPath: modelPath));
   if (cvHit != null) {
     if (cvHit.confidence < kMediumConfidence) {
       return {'path': srcPath, 'confidence': cvHit.confidence, 'cropped': false};

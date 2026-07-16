@@ -196,6 +196,22 @@ Not yet available — the reference backend is a Phase 2 deliverable. `docs/DEPL
 
 The scanning experience is built on, and inspired by, excellent open-source work:
 
+### Built with
+
+| Technology | Role in DokoDocs | License |
+|---|---|---|
+| **[Flutter](https://flutter.dev)** (Dart) | App framework, UI, every screen & platform (Android + iOS) | BSD-3-Clause |
+| **[OpenCV](https://opencv.org)** (`opencv_core`, natives bundled in-app) | The whole vision pipeline: live edge detection, scored candidate detection, perspective crop, enhancement & native render | Apache 2.0 |
+| **[TensorFlow / TensorFlow Lite](https://www.tensorflow.org/lite)** | On-device ML: a compact **U-Net document-segmentation model** runs alongside the OpenCV detector as a **hybrid adjudicator** (trained *only* on DokoDocs' own Apache-2.0 synthetic fixtures — no third-party training data; see [`docs/dataset_notice.md`](docs/dataset_notice.md)) | Apache 2.0 |
+| **[drift](https://pub.dev/packages/drift)** | Local SQLite database with migrations | MIT |
+| **[Riverpod](https://riverpod.dev)** (`flutter_riverpod`) | State management | MIT |
+| **[pdf](https://pub.dev/packages/pdf)** & **[pdfrx](https://pub.dev/packages/pdfrx)** | PDF generation and viewing | Apache 2.0 / MIT |
+| **[tflite_flutter](https://pub.dev/packages/tflite_flutter)** | On-device TFLite inference runtime for the segmentation model | Apache 2.0 |
+
+> **Training data posture:** the segmentation model is trained exclusively on DokoDocs-generated synthetic fixtures (random "text" geometry on procedural backgrounds — zero real or personal document content), so it carries no third-party dataset licence obligations. Real benchmark datasets (CORD, DocBank, …) are used only locally by maintainers and are **never** redistributed — see [`docs/dataset_notice.md`](docs/dataset_notice.md).
+
+### Projects we built on
+
 - **[jachzen/cunning_document_scanner](https://github.com/jachzen/cunning_document_scanner)** — DokoDocs' original (V1) scan path, wrapping **Google ML Kit Document Scanner** (Android) and **Apple VisionKit** (iOS). Superseded by our own OpenCV pipeline, but it got the first versions shipping. Thank you 🙏
 - **[ishaquehassan/document_scanner_flutter](https://github.com/ishaquehassan/document_scanner_flutter)** — inspiration for the **post-capture** side: the multi-mode filter set (Auto / Magic Color / Color / Professional / HD / Extreme Clarity / Receipt / Book / B&W Text), the enhancement-driven "scan modes" concept, and page-management/editing UX. We adopted the *ideas*, re-implemented for our pipeline rather than copying code. Thank you 🙏
 

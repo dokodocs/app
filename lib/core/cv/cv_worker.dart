@@ -53,11 +53,11 @@ class CvWorker {
   _Request? _inFlight;
   _Request? _queued;
 
-  static Future<CvWorker> spawn() async {
+  static Future<CvWorker> spawn({String? modelPath}) async {
     final handshake = ReceivePort();
     final isolate = await Isolate.spawn(
       _workerMain,
-      handshake.sendPort,
+      (handshake.sendPort, modelPath),
       debugName: 'cv_worker',
     );
     final fromWorker = ReceivePort();
@@ -150,7 +150,8 @@ class CvWorker {
 
   // ---- isolate side ----
 
-  static Future<void> _workerMain(SendPort handshake) async {
+  static Future<void> _workerMain((SendPort, String?) args) async {
+    final (handshake, modelPath) = args;
     final commands = ReceivePort();
     handshake.send(commands.sendPort);
 
@@ -181,6 +182,7 @@ class CvWorker {
           rotationDegrees: rotation,
           focusX: fx >= 0 ? fx : null,
           focusY: fy >= 0 ? fy : null,
+          modelPath: modelPath,
         );
         if (rotation % 180 != 0) {
           outW = height;

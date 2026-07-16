@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/database/database_provider.dart';
+import '../../core/cv/document_segmenter.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../editor/editor_screen.dart';
 import 'camera_scanner_screen.dart';
@@ -307,9 +308,12 @@ void autoCropSessionPagesInBackground(WidgetRef ref, List<String> paths) {
           'autocrop_${DateTime.now().microsecondsSinceEpoch}_'
           '${shot.hashCode.toRadixString(16)}.jpg',
         );
+        // Stage the ML model once (cached); null => classical CV only.
+        final modelPath = await ensureDocSegModelFile();
         final result = await compute(autoDetectAndCrop, <String, dynamic>{
           'srcPath': shot,
           'outPath': outPath,
+          'docSegModelPath': modelPath,
         });
         if (result['cropped'] == true) {
           // replacePath also clears the processing badge.

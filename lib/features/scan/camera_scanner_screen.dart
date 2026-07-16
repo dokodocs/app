@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 
 import '../../core/cv/cv_worker.dart';
+import '../../core/cv/document_segmenter.dart';
 import '../../core/flags.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../../core/perf/scan_perf.dart';
@@ -115,7 +116,11 @@ class _CameraScannerScreenState extends State<CameraScannerScreen>
 
   Future<void> _setup() async {
     if (kUseScannerV3) {
-      _cvWorker = await CvWorker.spawn();
+      // Stage the ML model on disk once (main isolate) and hand its path to the
+      // persistent worker isolate — which then runs the hybrid CV+ML detector
+      // every frame. null => model unavailable, classical CV only (no harm).
+      final modelPath = await ensureDocSegModelFile();
+      _cvWorker = await CvWorker.spawn(modelPath: modelPath);
     }
     _cameras = await availableCameras();
     await _start(front: false);

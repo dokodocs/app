@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:opencv_core/opencv.dart' as cv;
 
+import '../../core/cv/document_segmenter.dart';
 import 'crop_processor.dart';
 
 /// OpenCV-backed document detection (V2). This is the real fix for devices
@@ -18,6 +19,67 @@ class CvDetection {
   const CvDetection(this.quad, this.confidence);
   final Quad quad;
   final double confidence;
+}
+
+/// HYBRID ADJUDICATOR — fuse the classical OpenCV detector ([cvHit]) with the
+/// ML segmentation result ([mlHit]). Both must be in FULL-resolution pixel
+/// coords. Design rule: **the ML result can only help, never hurt** — when in
+/// doubt, the proven classical detector wins.
+///
+///   - ML absent/failed            -> CV result (unchanged behaviour).
+///   - CV absent, ML present        -> ML result, confidence kept modest (this
+///                                     is the win: cards in clutter where
+///                                     classical CV finds nothing).
+///   - Both present + high overlap   -> agreement: take ML's mask-snapped quad
+///                                     (sharper edges) and bump confidence for
+///                                     the mutual corroboration.
+///   - Both present + low overlap    -> disagreement: take the more confident;
+///                                     a user tap ([focus]) nudges toward ML
+///                                     (the reliable path for small cards).
+CvDetection? fuseCvAndMl(
+  CvDetection? cvHit,
+  DocSegResult? mlHit, {
+  ({double x, double y})? focus,
+}) {
+  if (mlHit == null) return cvHit;
+  final ml = CvDetection(mlHit.quad, mlHit.confidence);
+  if (cvHit == null) return ml;
+  final iou = _quadBboxIoU(cvHit.quad, ml.quad);
+  if (iou >= 0.6) {
+    final conf = (math.max(cvHit.confidence, ml.confidence) + 0.05)
+        .clamp(0.0, 0.97);
+    return CvDetection(ml.quad, conf);
+  }
+  // Disagreement: prefer the higher score. A tap biases toward ML (cards).
+  var mlScore = ml.confidence;
+  if (focus != null) mlScore += 0.05;
+  return mlScore > cvHit.confidence ? ml : cvHit;
+}
+
+/// Axis-aligned bounding-box IoU of two quads — a cheap, robust "do they agree
+/// on roughly the same region?" signal for [fuseCvAndMl]. (Runs every live
+/// frame, so polygon IoU would be wasteful here.)
+double _quadBboxIoU(Quad a, Quad b) {
+  final pa = [a.tl, a.tr, a.br, a.bl];
+  final pb = [b.tl, b.tr, b.br, b.bl];
+  double xmin(List<({double x, double y})> ps) =>
+      ps.fold<double>(1e18, (m, p) => math.min(m, p.x));
+  double ymin(List<({double x, double y})> ps) =>
+      ps.fold<double>(1e18, (m, p) => math.min(m, p.y));
+  double xmax(List<({double x, double y})> ps) =>
+      ps.fold<double>(-1e18, (m, p) => math.max(m, p.x));
+  double ymax(List<({double x, double y})> ps) =>
+      ps.fold<double>(-1e18, (m, p) => math.max(m, p.y));
+  final ax0 = xmin(pa), ay0 = ymin(pa), ax1 = xmax(pa), ay1 = ymax(pa);
+  final bx0 = xmin(pb), by0 = ymin(pb), bx1 = xmax(pb), by1 = ymax(pb);
+  final iw = math.min(ax1, bx1) - math.max(ax0, bx0);
+  final ih = math.min(ay1, by1) - math.max(ay0, by0);
+  if (iw <= 0 || ih <= 0) return 0;
+  final inter = iw * ih;
+  final ua = (ax1 - ax0) * (ay1 - ay0) +
+      (bx1 - bx0) * (by1 - by0) -
+      inter;
+  return ua <= 0 ? 0 : (inter / ua).clamp(0.0, 1.0);
 }
 
 /// Optional detection trace sink (diagnostics/harness only). When non-null,
@@ -49,6 +111,7 @@ CvDetection? detectDocumentCvBytes(
   Uint8List bytes, {
   int workLongEdge = 700,
   double minAreaFraction = 0.10,
+  String? modelPath,
 }) {
   cv.Mat? full, small, gray;
   try {
@@ -61,7 +124,10 @@ CvDetection? detectDocumentCvBytes(
 
     small = scale < 1.0 ? cv.resize(full, (sw, sh)) : full.clone();
     gray = cv.cvtColor(small, cv.COLOR_BGR2GRAY);
-    return _detectQuadOnGrayMat(gray, scale, minAreaFraction);
+    final cvHit = _detectQuadOnGrayMat(gray, scale, minAreaFraction);
+    if (modelPath == null) return cvHit; // ML disabled -> classical only
+    final mlHit = segmentGrayMat(gray, modelPath: modelPath, scaleToFull: scale);
+    return fuseCvAndMl(cvHit, mlHit);
   } catch (_) {
     // Any FFI/decoding failure → let the caller fall back to the Dart detector.
     return null;
@@ -87,6 +153,7 @@ CvDetection? detectDocumentCvGray(
   double minAreaFraction = 0.10,
   double? focusX,
   double? focusY,
+  String? modelPath,
 }) {
   cv.Mat? raw, gray;
   try {
@@ -106,7 +173,11 @@ CvDetection? detectDocumentCvGray(
     final focus = (focusX != null && focusY != null)
         ? (x: focusX * gray.cols, y: focusY * gray.rows)
         : null;
-    return _detectQuadOnGrayMat(gray, 1.0, minAreaFraction, focus: focus);
+    final cvHit =
+        _detectQuadOnGrayMat(gray, 1.0, minAreaFraction, focus: focus);
+    if (modelPath == null) return cvHit; // ML disabled -> classical only
+    final mlHit = segmentGrayMat(gray, modelPath: modelPath);
+    return fuseCvAndMl(cvHit, mlHit, focus: focus);
   } catch (_) {
     return null;
   } finally {
