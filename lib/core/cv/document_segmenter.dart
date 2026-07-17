@@ -97,18 +97,43 @@ Interpreter? _interpreterFor(String? modelPath) {
 /// with an honest 0..1 confidence, or null when the model is unavailable / finds
 /// no document. [scaleToFull] converts working-scale -> full-res (working/scale);
 /// pass 1.0 when the Mat is already full-res (the live path).
+///
+/// This is a thin wrapper over [segmentGrayMatWithMask] that discards the
+/// mask — kept for callers that only need the quad/confidence.
 DocSegResult? segmentGrayMat(
   cv.Mat gray, {
   String? modelPath,
   double scaleToFull = 1.0,
 }) {
+  final r = segmentGrayMatWithMask(gray, modelPath: modelPath, scaleToFull: scaleToFull);
+  r.mask?.dispose();
+  return r.result;
+}
+
+/// Like [segmentGrayMat], but ALSO returns the model's document mask
+/// upscaled to [gray]'s own resolution and dilated for margin — a binary
+/// (0/255) [cv.Mat] the SAME size as [gray], regardless of [scaleToFull].
+///
+/// This lets a caller restrict classical CV contour search (Canny/Otsu) to
+/// the region the neural net actually believes is the document, BEFORE
+/// scoring — mask-first, not fuse-after. A keyboard or monitor sitting
+/// outside the mask simply never generates a CV candidate, rather than
+/// being scored and possibly winning. The returned mask is null whenever
+/// [result] is null (model unavailable or no confident document region);
+/// callers own it and must dispose it.
+({DocSegResult? result, cv.Mat? mask}) segmentGrayMatWithMask(
+  cv.Mat gray, {
+  String? modelPath,
+  double scaleToFull = 1.0,
+}) {
   final interp = _interpreterFor(modelPath);
-  if (interp == null) return null;
+  if (interp == null) return (result: null, mask: null);
   final sw = gray.cols, sh = gray.rows;
-  if (sw < 8 || sh < 8) return null;
+  if (sw < 8 || sh < 8) return (result: null, mask: null);
   final N = kDocSegModelSize;
 
-  cv.Mat? resized, bin;
+  cv.Mat? resized, bin, maskN, upMask, marginKernel, dilatedMask;
+  cv.VecVecPoint? maskPoly;
   try {
     // 1) Build the float input: resize gray -> NxN (aspect squashed, matching
     //    training), normalise to 0..1.
@@ -140,7 +165,9 @@ DocSegResult? segmentGrayMat(
     }
     final areaFraction = (sum / (N * N)).clamp(0.0, 1.0);
     // A document should occupy a sane fraction of the frame.
-    if (areaFraction < 0.02 || areaFraction > 0.98) return null;
+    if (areaFraction < 0.02 || areaFraction > 0.98) {
+      return (result: null, mask: null);
+    }
 
     // 3) Threshold -> binary mask Mat, find the LARGEST contour -> quad.
     final binBytes = Uint8List(N * N);
@@ -158,7 +185,7 @@ DocSegResult? segmentGrayMat(
     bin = cv.Mat.fromList(N, N, cv.MatType.CV_8UC1, binBytes);
     final (contours, _) =
         cv.findContours(bin, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-    if (contours.isEmpty) return null;
+    if (contours.isEmpty) return (result: null, mask: null);
     cv.VecPoint? largest;
     var largestArea = 0.0;
     for (final c in contours) {
@@ -168,9 +195,19 @@ DocSegResult? segmentGrayMat(
         largest = c;
       }
     }
-    if (largest == null) return null;
-    final quadPts = _quadFromContour(largest);
-    if (quadPts == null) return null;
+    if (largest == null) return (result: null, mask: null);
+    // ROBUST quad: minAreaRect over the document region. approxPolyDP can
+    // return coincident / degenerate points on a real-photo mask (seen on
+    // actual user scans: two corners collapsed to one point, producing a
+    // triangle instead of a quad); minAreaRect ALWAYS yields a valid rotated
+    // rectangle. The precise corners are refined downstream by the
+    // mask-constrained CV detector + cornerSubPix, so a tight bounding
+    // rectangle here is the right trade (robustness over sub-pixel exactness).
+    final rrDoc = cv.minAreaRect(largest);
+    final rrDocPts = rrDoc.points;
+    final quadPts = _orderCornersDart(
+        [for (final p in rrDocPts) (p.x.toDouble(), p.y.toDouble())]);
+    rrDocPts.dispose();
 
     // 4) Rescale from N x N mask space -> working-scale, then working -> FULL-res
     //    (working/scaleToFull) so the result matches the CV detector's coords.
@@ -192,38 +229,38 @@ DocSegResult? segmentGrayMat(
     final frac = (largestArea / (N * N)).clamp(0.0, 1.0);
     final areaScore = (math.log(1 + 9 * frac) / math.log(10)).clamp(0.0, 1.0);
     final conf = (0.45 * areaScore + 0.55 * certainty).clamp(0.0, 0.9);
-    return DocSegResult(quad, conf, frac);
+    final result = DocSegResult(quad, conf, frac);
+
+    // 6) Build the working-scale search mask: fill the LARGEST contour (not
+    //    the raw thresholded blob — that can have stray specks) at N x N,
+    //    upscale to gray's own resolution with NEAREST (a mask has no
+    //    business being interpolated), then dilate by ~6% of the shorter
+    //    side so a slightly-tight segmentation doesn't clip the true page
+    //    edge out of the CV search region.
+    maskN = cv.Mat.zeros(N, N, cv.MatType.CV_8UC1);
+    maskPoly = cv.VecVecPoint.fromList([
+      [for (final p in largest) p]
+    ]);
+    cv.fillPoly(maskN, maskPoly, cv.Scalar.all(255));
+    upMask = cv.resize(maskN, (sw, sh), interpolation: cv.INTER_NEAREST);
+    final dilatePx = math.max(3, (0.06 * math.min(sw, sh)).round());
+    marginKernel =
+        cv.getStructuringElement(cv.MORPH_ELLIPSE, (dilatePx, dilatePx));
+    dilatedMask = cv.dilate(upMask, marginKernel);
+
+    final ownedMask = dilatedMask;
+    dilatedMask = null; // ownership transferred to the caller
+    return (result: result, mask: ownedMask);
   } catch (_) {
-    return null;
+    return (result: null, mask: null);
   } finally {
     resized?.dispose();
     bin?.dispose();
-  }
-}
-
-/// Extract an ordered (TL,TR,BR,BL) 4-point quad from a contour, preferring
-/// approxPolyDP; falls back to minAreaRect for messy/occluded outlines. Returns
-/// points in the contour's own pixel space as (x,y) pairs.
-List<(double, double)>? _quadFromContour(cv.VecPoint c) {
-  try {
-    final peri = cv.arcLength(c, true);
-    for (final eps in const [0.02, 0.03, 0.05, 0.08]) {
-      final approx = cv.approxPolyDP(c, eps * peri, true);
-      if (approx.length == 4 && cv.isContourConvex(approx)) {
-        final pts = [for (final p in approx) (p.x.toDouble(), p.y.toDouble())];
-        approx.dispose();
-        return _orderCornersDart(pts);
-      }
-      approx.dispose();
-    }
-    // Fallback: minAreaRect -> 4 corners (a true rotated rectangle).
-    final rr = cv.minAreaRect(c);
-    final rrPts = rr.points;
-    final pts = [for (final p in rrPts) (p.x.toDouble(), p.y.toDouble())];
-    rrPts.dispose();
-    return _orderCornersDart(pts);
-  } catch (_) {
-    return null;
+    maskN?.dispose();
+    upMask?.dispose();
+    marginKernel?.dispose();
+    dilatedMask?.dispose();
+    maskPoly?.dispose();
   }
 }
 

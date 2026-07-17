@@ -33,9 +33,13 @@ class CvDetection {
 ///   - Both present + high overlap   -> agreement: take ML's mask-snapped quad
 ///                                     (sharper edges) and bump confidence for
 ///                                     the mutual corroboration.
-///   - Both present + low overlap    -> disagreement: take the more confident;
-///                                     a user tap ([focus]) nudges toward ML
-///                                     (the reliable path for small cards).
+///   - Both present + low overlap    -> disagreement: CV is PLAUSIBILITY-
+///                                     penalised when its quad is much
+///                                     bigger than ML's independent estimate
+///                                     (likely bled onto the background),
+///                                     then the more confident wins; a user
+///                                     tap ([focus]) nudges toward ML (the
+///                                     reliable path for small cards).
 CvDetection? fuseCvAndMl(
   CvDetection? cvHit,
   DocSegResult? mlHit, {
@@ -50,10 +54,36 @@ CvDetection? fuseCvAndMl(
         .clamp(0.0, 0.97);
     return CvDetection(ml.quad, conf);
   }
-  // Disagreement: prefer the higher score. A tap biases toward ML (cards).
+  // Disagreement: prefer the higher score, but first apply a PLAUSIBILITY
+  // penalty to CV. The neural mask is a genuinely INDEPENDENT estimate of
+  // where the document is — when CV's quad is a lot bigger than ML's for the
+  // SAME frame, that's real evidence CV bled onto the background (the
+  // classic failure: a pale desk merges with the page into one bright/edgy
+  // blob that still scores well on edge-support/rectangularity/area alone),
+  // not just two detectors disagreeing over noise. A user tap still biases
+  // toward ML (cards/small objects).
+  final cvArea = _quadBboxArea(cvHit.quad);
+  final mlArea = _quadBboxArea(ml.quad);
+  var cvScore = cvHit.confidence;
+  if (mlArea > 0 && cvArea > 1.5 * mlArea) {
+    cvScore *= (mlArea / cvArea).clamp(0.3, 1.0);
+  }
   var mlScore = ml.confidence;
   if (focus != null) mlScore += 0.05;
-  return mlScore > cvHit.confidence ? ml : cvHit;
+  return mlScore > cvScore ? ml : cvHit;
+}
+
+/// Axis-aligned bounding-box area of a quad — see [_quadBboxIoU].
+double _quadBboxArea(Quad q) {
+  final pts = [q.tl, q.tr, q.br, q.bl];
+  double xmin = 1e18, ymin = 1e18, xmax = -1e18, ymax = -1e18;
+  for (final p in pts) {
+    if (p.x < xmin) xmin = p.x;
+    if (p.y < ymin) ymin = p.y;
+    if (p.x > xmax) xmax = p.x;
+    if (p.y > ymax) ymax = p.y;
+  }
+  return math.max(0.0, xmax - xmin) * math.max(0.0, ymax - ymin);
 }
 
 /// Axis-aligned bounding-box IoU of two quads — a cheap, robust "do they agree
@@ -124,10 +154,19 @@ CvDetection? detectDocumentCvBytes(
 
     small = scale < 1.0 ? cv.resize(full, (sw, sh)) : full.clone();
     gray = cv.cvtColor(small, cv.COLOR_BGR2GRAY);
-    final cvHit = _detectQuadOnGrayMat(gray, scale, minAreaFraction);
-    if (modelPath == null) return cvHit; // ML disabled -> classical only
-    final mlHit = segmentGrayMat(gray, modelPath: modelPath, scaleToFull: scale);
-    return fuseCvAndMl(cvHit, mlHit);
+    if (modelPath == null) {
+      return _detectQuadOnGrayMat(gray, scale, minAreaFraction); // classical only
+    }
+    // ML FIRST: run segmentation before classical CV so its document mask
+    // can constrain WHERE Canny/Otsu are even allowed to find a contour,
+    // instead of only fusing the two results after the fact.
+    final seg = segmentGrayMatWithMask(gray, modelPath: modelPath, scaleToFull: scale);
+    try {
+      final cvHit = _detectQuadOnGrayMat(gray, scale, minAreaFraction, docMask: seg.mask);
+      return fuseCvAndMl(cvHit, seg.result);
+    } finally {
+      seg.mask?.dispose();
+    }
   } catch (_) {
     // Any FFI/decoding failure → let the caller fall back to the Dart detector.
     return null;
@@ -173,11 +212,19 @@ CvDetection? detectDocumentCvGray(
     final focus = (focusX != null && focusY != null)
         ? (x: focusX * gray.cols, y: focusY * gray.rows)
         : null;
-    final cvHit =
-        _detectQuadOnGrayMat(gray, 1.0, minAreaFraction, focus: focus);
-    if (modelPath == null) return cvHit; // ML disabled -> classical only
-    final mlHit = segmentGrayMat(gray, modelPath: modelPath);
-    return fuseCvAndMl(cvHit, mlHit, focus: focus);
+    if (modelPath == null) {
+      return _detectQuadOnGrayMat(gray, 1.0, minAreaFraction, focus: focus);
+    }
+    // ML FIRST (see detectDocumentCvBytes) — mask-constrains the CV search
+    // instead of only fusing after both detectors finish independently.
+    final seg = segmentGrayMatWithMask(gray, modelPath: modelPath);
+    try {
+      final cvHit = _detectQuadOnGrayMat(gray, 1.0, minAreaFraction,
+          focus: focus, docMask: seg.mask);
+      return fuseCvAndMl(cvHit, seg.result, focus: focus);
+    } finally {
+      seg.mask?.dispose();
+    }
   } catch (_) {
     return null;
   } finally {
@@ -220,6 +267,14 @@ CvDetection? _detectQuadOnGrayMat(
   double scale,
   double minAreaFraction, {
   ({double x, double y})? focus,
+  // MASK-CONSTRAINED SEARCH: when the neural segmenter is confident, its
+  // document mask (SAME resolution as [gray], dilated for margin — see
+  // segmentGrayMatWithMask) restricts WHERE Canny/Otsu are even allowed to
+  // find a contour. A keyboard or monitor sitting outside the mask never
+  // becomes a CV candidate at all, instead of becoming one and having to be
+  // out-scored. Null when ML is disabled/unavailable/unconfident — CV then
+  // searches the whole frame exactly as before (ML can only help).
+  cv.Mat? docMask,
 }) {
   cv.Mat? blur, edges, kernel, closed, binary, binClosed;
   try {
@@ -235,6 +290,11 @@ CvDetection? _detectQuadOnGrayMat(
     // backgrounds (white paper on light wood).
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (9, 9));
     closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel);
+    if (docMask != null) {
+      final masked = cv.bitwiseAND(closed, docMask);
+      closed.dispose();
+      closed = masked;
+    }
 
     // Candidate source 1: contours of the closed edge map.
     final (edgeContours, _) =
@@ -250,85 +310,23 @@ CvDetection? _detectQuadOnGrayMat(
     // border-touching mega-blob that then fails the border filter (harness
     // fixtures showed exactly this).
     binClosed = cv.morphologyEx(binary, cv.MORPH_OPEN, kernel);
+    if (docMask != null) {
+      final masked = cv.bitwiseAND(binClosed, docMask);
+      binClosed.dispose();
+      binClosed = masked;
+    }
     final (binContours, _) =
         cv.findContours(binClosed, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    // Candidate source 3: CENTRE-SEEDED FLOOD FILL — the document is where
-    // the user aims. Global Otsu fails when a pale desk is nearly as bright
-    // as the paper (real-device finding: light wooden desk); a flood fill
-    // from centre seeds grows across the page's smooth surface and stops at
-    // its printed/physical edges, giving the page region directly even when
-    // it runs off-frame or has a card lying on it (interior holes don't
-    // affect the outer contour).
-    final floodContours = <cv.VecPoint>[];
-    // The user's tap (focus) becomes the FIRST flood seed — grow the tapped
-    // object's own region directly.
-    final seeds = <(double, double)>[
-      if (focus != null) (focus.x / sw, focus.y / sh),
-      (0.50, 0.55),
-      (0.35, 0.50),
-      (0.65, 0.50),
-      (0.50, 0.35),
-      (0.50, 0.72),
-    ];
-    for (final seed in seeds) {
-      cv.Mat? ffMask;
-      try {
-        ffMask = cv.Mat.zeros(sh + 2, sw + 2, cv.MatType.CV_8UC1);
-        // FIXED_RANGE (compare to the SEED's value, not the neighbour):
-        // neighbour-diff leaks across the soft, blurred page→desk boundary
-        // pixel by pixel (harness: every flood region ballooned past 95% and
-        // was area-rejected). Fixed ±25 keeps the fill on paper-bright
-        // pixels only — a pale desk is still measurably darker than paper.
-        cv.floodFill(
-          blur,
-          cv.Point((seed.$1 * sw).round(), (seed.$2 * sh).round()),
-          cv.Scalar.all(0),
-          mask: ffMask,
-          loDiff: cv.Scalar.all(25),
-          upDiff: cv.Scalar.all(25),
-          flags: 4 |
-              cv.FLOODFILL_MASK_ONLY |
-              cv.FLOODFILL_FIXED_RANGE |
-              (255 << 8),
-        );
-        // floodFill marks the mask's 1-px rim internally, so contouring the
-        // raw mask returns ONE whole-mask component (harness: every flood
-        // candidate showed area≈1.005 and was rejected). Cut the rim ROI and
-        // keep only the 255-filled pixels — this also re-aligns coordinates
-        // with the image (the mask is offset by +1).
-        final roi = ffMask.region(cv.Rect(1, 1, sw, sh));
-        final (_, fill) = cv.threshold(roi, 127, 255, cv.THRESH_BINARY);
-        roi.dispose();
-        final (cs, _) =
-            cv.findContours(fill, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-        fill.dispose();
-        // Keep only the largest region per seed (the fill itself).
-        cv.VecPoint? largest;
-        var largestArea = 0.0;
-        for (final c in cs) {
-          final a = cv.contourArea(c);
-          if (a > largestArea) {
-            largestArea = a;
-            largest = c;
-          }
-        }
-        if (largest != null && largestArea > 0.03 * sw * sh) {
-          // DEEP COPY: `largest` is a view into `cs` (VecVecPoint), which is
-          // GC-eligible once this block exits — a dangling native pointer
-          // would silently kill the candidate via the catch.
-          floodContours
-              .add(cv.VecPoint.fromList([for (final p in largest) p]));
-        }
-      } catch (_) {
-        // A failed seed is fine — the other sources still run.
-      } finally {
-        ffMask?.dispose();
-      }
-    }
-
     final frameArea = (sw * sh).toDouble();
     final borderMargin = 0.02 * math.min(sw, sh);
+
+    // Candidate source 3: CENTRE-SEEDED FLOOD FILL — see [_addFloodContours].
+    // FLOOD IS FALLBACK ONLY: generated lazily below, only when Canny/Otsu
+    // fail to produce a confident candidate (a low-contrast desk routinely
+    // makes the fill leak past the page, producing a near-frame blob that
+    // must not compete equally with a real Canny/Otsu document candidate).
+    final floodContours = <cv.VecPoint>[];
 
     final trace =
         detectionTraceSink == null ? null : <Map<String, dynamic>>[];
@@ -345,12 +343,8 @@ CvDetection? _detectQuadOnGrayMat(
     var contourCount = 0;
     var winnerIndex = -1;
     _ScoredQuad? best;
-    final sources = <(String, Iterable<cv.VecPoint>)>[
-      ('canny', edgeContours),
-      ('otsu', binContours),
-      ('flood', floodContours),
-    ];
-    for (final (sourceName, contours) in sources) {
+
+    void scoreSource(String sourceName, Iterable<cv.VecPoint> contours) {
       for (final c in contours) {
         contourCount++;
         final area = cv.contourArea(c);
@@ -439,6 +433,18 @@ CvDetection? _detectQuadOnGrayMat(
           }
         }
         final touchesBorder = borderCorners > 0;
+        // HARD filter: ≥3 corners on the frame border is not a document that
+        // grazes the edge — it's the frame itself (the classic false
+        // positive: flood fill or a merged Canny contour spanning almost the
+        // whole photo). A SOFT penalty was not enough — a frame quad's
+        // strong edge/rectangularity/area scores still beat many real
+        // documents even after a ×0.6 multiplier, so this must be a hard
+        // reject, not a discount.
+        if (borderCorners >= 3) {
+          rejects?.update('border', (v) => v + 1);
+          quad4.dispose();
+          continue;
+        }
         // HARD filters: interior angles 55°–125°; opposite sides ratio ≤ 3.
         if (!_anglesSane(ordered) || !_sidesSane(ordered)) {
           if (!_anglesSane(ordered)) {
@@ -453,8 +459,8 @@ CvDetection? _detectQuadOnGrayMat(
 
         final s = _scoreCandidate(
           gray: gray,
-          rawEdges: edges,
-          closedEdges: closed,
+          rawEdges: edges!,
+          closedEdges: closed!,
           quad: quad4,
           ordered: ordered,
           area: area,
@@ -469,18 +475,15 @@ CvDetection? _detectQuadOnGrayMat(
           rejects?.update('sides', (v) => v + 1);
           continue;
         }
-        // Border-touching quads are SOFT-penalised, not rejected — and the
-        // penalty is GRADUATED by how many corners touch. Harness finding:
-        // a real document whose merged blob merely grazes the frame edge
-        // (1–2 corners) was being crushed to 0.46 by a flat ×0.65 despite a
-        // perfect document-like interior (brightness 1.0, uniformity 0.9);
-        // a frame-hugging false positive has 3–4 corners out and still gets
-        // squashed hard.
+        // Border-touching quads with 1–2 corners out are SOFT-penalised, not
+        // rejected (≥3 corners was already hard-rejected above). Harness
+        // finding: a real document whose merged blob merely grazes the frame
+        // edge was being crushed to 0.46 by too flat a multiplier despite a
+        // perfect document-like interior (brightness 1.0, uniformity 0.9).
         final borderFactor = switch (borderCorners) {
           0 => 1.0,
           1 => 0.9,
-          2 => 0.8,
-          _ => 0.6,
+          _ => 0.8,
         };
         // Tap-to-target: when the user has tapped an object, candidates NOT
         // containing the tap are heavily demoted and the containing ones get
@@ -502,12 +505,36 @@ CvDetection? _detectQuadOnGrayMat(
           'uniformity': s.uniformity,
           'areaScore': s.areaScore,
         });
-        if (best == null || total > best.score) {
+        final currentBest = best;
+        if (currentBest == null || total > currentBest.score) {
           best = _ScoredQuad(ordered, total);
           if (trace != null) winnerIndex = trace.length - 1;
         }
       }
     }
+
+    scoreSource('canny', edgeContours);
+    scoreSource('otsu', binContours);
+
+    // FLOOD IS FALLBACK ONLY: only pay for the (relatively expensive)
+    // multi-seed flood fill, and only let its results compete, when Canny
+    // and Otsu together failed to produce a confident candidate. This keeps
+    // flood's frame-leaking failure mode from ever outscoring a real
+    // Canny/Otsu document candidate.
+    const confidentScore = 0.5;
+    final preFloodBest = best;
+    if (preFloodBest == null || preFloodBest.score < confidentScore) {
+      _addFloodContours(
+        blur: blur,
+        sw: sw,
+        sh: sh,
+        borderMargin: borderMargin,
+        focus: focus,
+        out: floodContours,
+      );
+      scoreSource('flood', floodContours);
+    }
+
     detectionTraceSink?.add({
       'candidates': trace ?? const [],
       'winner': winnerIndex,
@@ -515,13 +542,14 @@ CvDetection? _detectQuadOnGrayMat(
       'floodContours': floodContours.length,
       'rejects': rejects,
     });
-    if (best == null) return null;
+    final finalBest = best;
+    if (finalBest == null) return null;
 
     // CORNER REFINEMENT: snap the winning corners to the strongest local
     // gradient corner (sub-pixel) so the green outline hugs the physical
     // page edges instead of the contour approximation — client: "adjust the
     // corner to match edges properly", removes the need to re-crop.
-    var refined = best.corners;
+    var refined = finalBest.corners;
     cv.VecPoint2f? cps;
     // cornerSubPix requires every point's (winSize) search window to stay
     // fully inside the image, or it throws a native assertion — which real
@@ -565,7 +593,7 @@ CvDetection? _detectQuadOnGrayMat(
         (x: p.x / scale, y: p.y / scale);
     return CvDetection(
       Quad(up(refined[0]), up(refined[1]), up(refined[2]), up(refined[3])),
-      best.score.clamp(0.0, 0.99),
+      finalBest.score.clamp(0.0, 0.99),
     );
   } catch (_) {
     // Any FFI failure → let the caller fall back to the Dart detector.
@@ -577,6 +605,110 @@ CvDetection? _detectQuadOnGrayMat(
     closed?.dispose();
     binary?.dispose();
     binClosed?.dispose();
+  }
+}
+
+/// CENTRE-SEEDED FLOOD FILL fallback candidate source — the document is
+/// where the user aims. Global Otsu fails when a pale desk is nearly as
+/// bright as the paper (real-device finding: light wooden desk); a flood
+/// fill from centre seeds grows across the page's smooth surface and stops
+/// at its printed/physical edges, giving the page region directly even when
+/// it runs off-frame or has a card lying on it (interior holes don't affect
+/// the outer contour). Appends accepted regions (as contours) to [out].
+void _addFloodContours({
+  required cv.Mat blur,
+  required int sw,
+  required int sh,
+  required double borderMargin,
+  required ({double x, double y})? focus,
+  required List<cv.VecPoint> out,
+}) {
+  // The user's tap (focus) becomes the FIRST flood seed — grow the tapped
+  // object's own region directly.
+  final seeds = <(double, double)>[
+    if (focus != null) (focus.x / sw, focus.y / sh),
+    (0.50, 0.55),
+    (0.35, 0.50),
+    (0.65, 0.50),
+    (0.50, 0.35),
+    (0.50, 0.72),
+  ];
+  for (final seed in seeds) {
+    cv.Mat? ffMask;
+    try {
+      ffMask = cv.Mat.zeros(sh + 2, sw + 2, cv.MatType.CV_8UC1);
+      // FIXED_RANGE (compare to the SEED's value, not the neighbour):
+      // neighbour-diff leaks across the soft, blurred page→desk boundary
+      // pixel by pixel (harness: every flood region ballooned past 95% and
+      // was area-rejected). Fixed ±25 keeps the fill on paper-bright
+      // pixels only — a pale desk is still measurably darker than paper.
+      cv.floodFill(
+        blur,
+        cv.Point((seed.$1 * sw).round(), (seed.$2 * sh).round()),
+        cv.Scalar.all(0),
+        mask: ffMask,
+        loDiff: cv.Scalar.all(25),
+        upDiff: cv.Scalar.all(25),
+        flags: 4 |
+            cv.FLOODFILL_MASK_ONLY |
+            cv.FLOODFILL_FIXED_RANGE |
+            (255 << 8),
+      );
+      // floodFill marks the mask's 1-px rim internally, so contouring the
+      // raw mask returns ONE whole-mask component (harness: every flood
+      // candidate showed area≈1.005 and was rejected). Cut the rim ROI and
+      // keep only the 255-filled pixels — this also re-aligns coordinates
+      // with the image (the mask is offset by +1).
+      final roi = ffMask.region(cv.Rect(1, 1, sw, sh));
+      final (_, fill) = cv.threshold(roi, 127, 255, cv.THRESH_BINARY);
+      roi.dispose();
+      final (cs, _) =
+          cv.findContours(fill, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      fill.dispose();
+      // Keep only the largest region per seed (the fill itself).
+      cv.VecPoint? largest;
+      var largestArea = 0.0;
+      for (final c in cs) {
+        final a = cv.contourArea(c);
+        if (a > largestArea) {
+          largestArea = a;
+          largest = c;
+        }
+      }
+      if (largest != null &&
+          largestArea > 0.03 * sw * sh &&
+          largestArea <= 0.90 * sw * sh) {
+        // HARD reject flood regions that reach the image border — this is
+        // the classic "leaked onto the desk" failure (FIXED_RANGE ±25 is
+        // not always tight enough on a low-contrast desk/paper boundary),
+        // and it produces a near-frame quad that would otherwise still
+        // compete in scoring. A region capped at 90% of the frame area is
+        // an extra guard against a fill that grew large but happens not to
+        // touch a pixel exactly on the border.
+        var minX = sw.toDouble(), minY = sh.toDouble();
+        var maxX = 0.0, maxY = 0.0;
+        for (final p in largest) {
+          if (p.x < minX) minX = p.x.toDouble();
+          if (p.y < minY) minY = p.y.toDouble();
+          if (p.x > maxX) maxX = p.x.toDouble();
+          if (p.y > maxY) maxY = p.y.toDouble();
+        }
+        final touchesFrameEdge = minX <= borderMargin ||
+            minY <= borderMargin ||
+            maxX >= sw - 1 - borderMargin ||
+            maxY >= sh - 1 - borderMargin;
+        if (!touchesFrameEdge) {
+          // DEEP COPY: `largest` is a view into `cs` (VecVecPoint), which
+          // is GC-eligible once this block exits — a dangling native
+          // pointer would silently kill the candidate via the catch.
+          out.add(cv.VecPoint.fromList([for (final p in largest) p]));
+        }
+      }
+    } catch (_) {
+      // A failed seed is fine — the other sources still run.
+    } finally {
+      ffMask?.dispose();
+    }
   }
 }
 
@@ -664,14 +796,17 @@ bool _sidesSane(List<({double x, double y})> q) {
 }
 
 /// Document-ness score, 0..1. Weighted sum of:
-///  - edge support (0.30): fraction of the quad's perimeter lying on real
-///    (closed) Canny edges — kills quads whose sides cross empty desk.
+///  - edge support (0.45): fraction of the quad's perimeter lying on real
+///    (closed) Canny edges — kills quads whose sides cross empty desk. This
+///    is the dominant term: it's the signal that best tells a real page
+///    apart from a desk/keyboard/frame quad, which area cannot.
 ///  - rectangularity (0.15): quad area / minAreaRect area.
 ///  - brightness contrast (0.20): interior mean gray minus a surrounding
 ///    ring's mean — paper is brighter than desks/keyboards.
-///  - interior uniformity (0.20): low raw-edge density inside — paper with
+///  - interior uniformity (0.15): low raw-edge density inside — paper with
 ///    text is mostly smooth; a keyboard is wall-to-wall gradients.
-///  - area (0.15): log-scaled moderate preference, never dominant.
+///  - area (0.05): log-scaled minor preference — kept small because a
+///    frame-spanning false positive is large by definition.
 typedef _ScoreBreakdown = ({
   double edgeSupport,
   double rectangularity,
@@ -778,17 +913,22 @@ _ScoreBreakdown _scoreCandidate({
     // uniformity would punish them unfairly; their sharp physical edges are
     // the strongest signal instead.
     final small = frac < 0.15;
+    // Area is a weak, easily-gamed signal (a frame-spanning false positive
+    // is large BY DEFINITION), so it is kept minor; edge support is the
+    // strongest true document-vs-background signal (a real page's sides lie
+    // on real Canny edges the whole way round, a desk/keyboard/frame quad's
+    // sides mostly don't), so it now dominates the score.
     final total = small
         ? 0.40 * edgeSupport +
             0.20 * rectangularity +
             0.25 * brightness +
             0.05 * uniformity +
             0.10 * areaScore
-        : 0.30 * edgeSupport +
+        : 0.45 * edgeSupport +
             0.15 * rectangularity +
             0.20 * brightness +
-            0.20 * uniformity +
-            0.15 * areaScore;
+            0.15 * uniformity +
+            0.05 * areaScore;
     return (
       edgeSupport: edgeSupport,
       rectangularity: rectangularity,
@@ -878,5 +1018,40 @@ String? warpQuadCv(String srcPath, List<double> corners, String outPath) {
     out?.dispose();
     srcPts?.dispose();
     dstPts?.dispose();
+  }
+}
+
+/// Bakes a JPEG's EXIF orientation into its actual pixel data, IN PLACE at
+/// [path], via native OpenCV (fast — no pure-Dart 12 MP decode). Camera/
+/// gallery JPEGs are frequently stored physically landscape with an EXIF
+/// `Orientation` tag rather than upright pixels; `cv.imread`/`cv.imdecode`
+/// respect that tag by default (OpenCV's `IMREAD_IGNORE_ORIENTATION` flag,
+/// which would disable this, is NOT set anywhere in this codebase), so
+/// decoding once and re-encoding produces a plain file with correct upright
+/// pixels and no orientation tag left to misinterpret.
+///
+/// This matters because the pure-Dart `image` package used elsewhere in the
+/// render pipeline (see page_renderer.dart) does NOT auto-apply EXIF
+/// orientation on decode — it only exposes it as metadata
+/// (`Image.exif.imageIfd.orientation`) — so a page that falls through to a
+/// "no confident crop, use the raw file" path rendered sideways. Normalizing
+/// once, right after capture/import and before any detection or rendering,
+/// means every downstream consumer agrees on orientation regardless of
+/// which decoder it uses. Returns true on success; false (no-op, original
+/// file untouched) when the image can't be read/rewritten — callers should
+/// treat that as "leave the original as-is" rather than fail the page.
+bool normalizeJpegOrientationCv(String path) {
+  cv.Mat? mat;
+  try {
+    mat = cv.imread(path, flags: cv.IMREAD_COLOR);
+    if (mat.isEmpty) return false;
+    final (ok, bytes) = cv.imencode('.jpg', mat);
+    if (!ok) return false;
+    File(path).writeAsBytesSync(bytes);
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    mat?.dispose();
   }
 }

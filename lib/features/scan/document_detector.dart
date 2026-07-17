@@ -46,6 +46,15 @@ Map<String, dynamic> autoDetectAndCrop(Map<String, dynamic> args) {
   // Optional path to the staged ML model file; when present, the detector runs
   // the hybrid CV+ML adjudicator (see document_detector_cv.dart).
   final modelPath = args['docSegModelPath'] as String?;
+
+  // ROTATION FIRST: bake any EXIF orientation into upright pixels before
+  // anything else touches this file — detection, warp, AND (for pages that
+  // fall through to the "no confident crop" branch below) the final render.
+  // See normalizeJpegOrientationCv's doc comment for why this is necessary
+  // even though the CV detector itself already reads EXIF correctly.
+  ScanPerf.time(
+      'page.normalizeOrientation', () => normalizeJpegOrientationCv(srcPath));
+
   final bytes =
       ScanPerf.time('page.read', () => File(srcPath).readAsBytesSync());
 
