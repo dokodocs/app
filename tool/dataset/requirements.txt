@@ -1,0 +1,5 @@
+# Python tooling for tool/dataset/ (NOT a Flutter/Dart dependency).
+# Used only by the synthetic-fixture generator + dataset scripts. Never shipped
+# in any app build.
+numpy>=1.24
+Pillow>=10.0

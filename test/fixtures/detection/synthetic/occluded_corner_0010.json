@@ -1,0 +1,25 @@
+{
+  "image": "occluded_corner_0010.png",
+  "corners": [
+    [
+      136.6,
+      255.3
+    ],
+    [
+      601.0,
+      264.3
+    ],
+    [
+      605.9,
+      717.5
+    ],
+    [
+      128.4,
+      719.9
+    ]
+  ],
+  "tags": [
+    "synthdocs",
+    "occluded_corner"
+  ]
+}

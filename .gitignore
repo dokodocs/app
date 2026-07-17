@@ -47,15 +47,26 @@ ios/.symlinks/
 # Coverage
 coverage/
 
-# Local detection-harness inputs (may contain personal documents) + outputs
-test/fixtures/detection/
+# Detection harness inputs/outputs.
+# ONLY DokoDocs-generated synthetic composites + fixture JSON are tracked, under
+# test/fixtures/detection/synthetic/. Real dataset images belong in a local
+# test/fixtures/detection/raw/ (gitignored) and are NEVER committed — see
+# docs/DATASET_NOTICE.md.
+test/fixtures/detection/*
+!test/fixtures/detection/synthetic/
 docs/detection_results/
 
 
 # Local notes
 todo.md
-docs/
+docs/*
+!docs/DATASET_NOTICE.md
 TODO.md
 
 # Local signed APK copies for manual release upload
 /release_apk/
+
+# Python tooling caches + dataset-generator staging (never shipped in any build)
+__pycache__/
+*.pyc
+tool/dataset/_build/

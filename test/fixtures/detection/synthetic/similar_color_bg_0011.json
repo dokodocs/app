@@ -1,0 +1,25 @@
+{
+  "image": "similar_color_bg_0011.png",
+  "corners": [
+    [
+      142.1,
+      283.1
+    ],
+    [
+      605.2,
+      285.1
+    ],
+    [
+      617.2,
+      693.3
+    ],
+    [
+      129.6,
+      690.9
+    ]
+  ],
+  "tags": [
+    "synthdocs",
+    "similar_color_bg"
+  ]
+}
