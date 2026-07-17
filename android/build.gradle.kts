@@ -23,10 +23,19 @@ subprojects {
 // androidx dependencies require ≥34 — force Android *library* subprojects up
 // to the app's compileSdk so checkReleaseAarMetadata passes. (:app itself is
 // an application module, not a LibraryExtension, so it's untouched.)
+//
+// Also align Java/Kotlin JVM targets to the app's (17): some plugins (e.g.
+// tflite_flutter) default Java to 11 while their Kotlin compiles to 17, which
+// fails :plugin:compileReleaseKotlin with an "Inconsistent JVM Target
+// Compatibility" error. Forcing Java 17 here makes both consistent.
 fun forceLibraryCompileSdk(p: Project) {
     p.extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)?.apply {
         if ((compileSdk ?: 0) < 36) {
             compileSdk = 36
+        }
+        compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
         }
     }
 }
