@@ -6,6 +6,7 @@ import 'repositories/documents_repository.dart';
 import 'repositories/folders_repository.dart';
 import 'repositories/pages_repository.dart';
 import 'repositories/signatures_repository.dart';
+import 'repositories/user_profile_repository.dart';
 import 'repositories/user_settings_repository.dart';
 
 /// App-wide singleton database connection. Overridden in widget tests with
@@ -30,6 +31,14 @@ final foldersRepositoryProvider = Provider<FoldersRepository>((ref) {
 
 final userSettingsRepositoryProvider = Provider<UserSettingsRepository>((ref) {
   return UserSettingsRepository(ref.watch(databaseProvider));
+});
+
+final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
+  return UserProfileRepository(ref.watch(databaseProvider));
+});
+
+final userProfileProvider = StreamProvider<UserProfileData>((ref) {
+  return ref.watch(userProfileRepositoryProvider).watch();
 });
 
 final documentVersionsRepositoryProvider =

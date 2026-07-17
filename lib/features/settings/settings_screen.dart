@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/l10n/app_localizations.dart';
 import '../onboarding/onboarding_flow.dart';
+import '../profile/profile_screen.dart';
 import 'providers/settings_provider.dart';
 import 'system_status_section.dart';
 
@@ -29,6 +30,16 @@ class SettingsScreen extends ConsumerWidget {
         error: (error, stackTrace) => Center(child: Text('$error')),
         data: (settings) => ListView(
           children: [
+            ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: Text(l10n.settingsProfile),
+              subtitle: Text(l10n.settingsProfileSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+            ),
+            const Divider(),
             _SectionHeader(l10n.settingsAppearance),
             ListTile(
               title: Text(l10n.settingsTheme),

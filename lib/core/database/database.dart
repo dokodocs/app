@@ -9,6 +9,7 @@ import 'tables/pages.dart';
 import 'tables/signatures.dart';
 import 'tables/stamps.dart';
 import 'tables/tags.dart';
+import 'tables/user_profile.dart';
 import 'tables/user_settings.dart';
 
 part 'database.g.dart';
@@ -27,6 +28,7 @@ part 'database.g.dart';
     Signatures,
     Stamps,
     UserSettings,
+    UserProfile,
     DocumentVersions,
   ],
 )
@@ -36,7 +38,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.withExecutor(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -76,6 +78,10 @@ class AppDatabase extends _$AppDatabase {
 
         // Version history table.
         await m.createTable(documentVersions);
+      }
+      if (from < 4) {
+        // v4: local user profile (picture, name, email, mobile number).
+        await m.createTable(userProfile);
       }
     },
   );
